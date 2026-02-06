@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zero-Touch Onboarding — API Test Page</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
+        h1 { text-align: center; margin-bottom: 8px; color: #38bdf8; font-size: 1.8rem; }
+        .subtitle { text-align: center; color: #94a3b8; margin-bottom: 24px; font-size: 0.9rem; }
+        .token-bar { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .token-bar label { font-weight: 600; color: #38bdf8; white-space: nowrap; }
+        .token-bar input { flex: 1; min-width: 200px; background: #0f172a; border: 1px solid #475569; border-radius: 4px; color: #e2e8f0; padding: 6px 10px; font-family: monospace; font-size: 0.8rem; }
+        .token-bar .status { font-size: 0.8rem; padding: 4px 8px; border-radius: 4px; }
+        .token-bar .status.active { background: #065f46; color: #6ee7b7; }
+        .token-bar .status.inactive { background: #7f1d1d; color: #fca5a5; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+        .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; overflow: hidden; }
+        .card-header { background: #334155; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; }
+        .card-header h3 { font-size: 0.95rem; color: #f1f5f9; }
+        .method { font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+        .method.get { background: #065f46; color: #6ee7b7; }
+        .method.post { background: #1e3a5f; color: #7dd3fc; }
+        .method.put { background: #713f12; color: #fde68a; }
+        .method.delete { background: #7f1d1d; color: #fca5a5; }
+        .card-body { padding: 14px 16px; }
+        .field { margin-bottom: 10px; }
+        .field label { display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 3px; }
+        .field input, .field textarea, .field select { width: 100%; background: #0f172a; border: 1px solid #475569; border-radius: 4px; color: #e2e8f0; padding: 7px 10px; font-size: 0.85rem; font-family: inherit; }
+        .field textarea { min-height: 60px; resize: vertical; }
+        .field input[type="file"] { padding: 5px; }
+        .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.85rem; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.85; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-success { background: #059669; color: #fff; }
+        .btn-danger { background: #dc2626; color: #fff; }
+        .btn-warning { background: #d97706; color: #fff; }
+        .response-box { margin-top: 10px; background: #0f172a; border: 1px solid #475569; border-radius: 4px; padding: 10px; max-height: 250px; overflow-y: auto; font-family: monospace; font-size: 0.78rem; white-space: pre-wrap; word-break: break-all; color: #a5f3fc; }
+        .response-box.error { color: #fca5a5; border-color: #7f1d1d; }
+        .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+        .sse-log { margin-top: 10px; background: #0f172a; border: 1px solid #475569; border-radius: 4px; padding: 10px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.78rem; color: #86efac; }
+        .sse-log .event { margin-bottom: 4px; padding: 2px 0; border-bottom: 1px solid #1e293b; }
+    </style>
+</head>
+<body>
+
+<h1>⚡ Zero-Touch Onboarding — API Tester</h1>
+<p class="subtitle">Test all backend endpoints. Signup first, then login to get a JWT token.</p>
+
+<!-- Token Bar -->
+<div class="token-bar">
+    <label>🔑 JWT Token:</label>
+    <input type="text" id="jwt-token" placeholder="Login to get a token..." readonly>
+    <span id="token-status" class="status inactive">No Token</span>
+    <button class="btn btn-danger" onclick="clearToken()" style="font-size:0.75rem; padding:4px 10px;">Clear</button>
+</div>
+
+<div class="grid">
+
+    <!-- ════════════════════════════════════════════════ -->
+    <!-- AUTH: SIGNUP -->
+    <!-- ════════════════════════════════════════════════ -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Signup</h3>
+            <span class="method post">POST</span>
+        </div>
+        <div class="card-body">
+            <div class="field"><label>Name</label><input type="text" id="signup-name" value="Test User"></div>
+            <div class="field"><label>Email</label><input type="email" id="signup-email" value="test@example.com"></div>
+            <div class="field"><label>Password</label><input type="password" id="signup-password" value="password123"></div>
+            <button class="btn btn-primary" onclick="doSignup()">Create Account</button>
+            <div id="signup-response" class="response-box" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- AUTH: LOGIN -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Login</h3>
+            <span class="method post">POST</span>
+        </div>
+        <div class="card-body">
+            <div class="field"><label>Email</label><input type="email" id="login-email" value="test@example.com"></div>
+            <div class="field"><label>Password</label><input type="password" id="login-password" value="password123"></div>
+            <button class="btn btn-success" onclick="doLogin()">Login & Get Token</button>
+            <div id="login-response" class="response-box" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- AUTH: GET ME -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Get Current User</h3>
+            <span class="method get">GET</span>
+        </div>
+        <div class="card-body">
+            <button class="btn btn-primary" onclick="doGetMe()">Get /api/auth/me</button>
+            <div id="me-response" class="response-box" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════ -->
+    <!-- EMPLOYEES: CREATE -->
+    <!-- ════════════════════════════════════════════════ -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Create Employee</h3>
+            <span class="method post">POST</span>
+        </div>
+        <div class="card-body">
+            <div class="field"><label>Name</label><input type="text" id="emp-name" value="Jane Doe"></div>
+            <div class="field"><label>Email</label><input type="email" id="emp-email" value="jane@company.com"></div>
+            <div class="field"><label>Role</label><input type="text" id="emp-role" value="Software Engineer"></div>
+            <div class="field"><label>Department</label><input type="text" id="emp-dept" value="Engineering"></div>
+            <div class="field"><label>Start Date</label><input type="date" id="emp-date" value="2026-03-01"></div>
+            <div class="field"><label>Manager Email</label><input type="email" id="emp-manager" value="manager@company.com"></div>
+            <div class="field"><label>Buddy Email</label><input type="email" id="emp-buddy" value="buddy@company.com"></div>
+            <button class="btn btn-primary" onclick="doCreateEmployee()">Create Employee</button>
+            <div id="emp-create-response" class="response-box" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- EMPLOYEES: LIST -->
+    <div class="card">
+        <div class="card-header">
+            <h3>List Employees</h3>
+            <span class="method get">GET</span>
+        </div>
+        <div class="card-body">
+            <button class="btn btn-primary" onclick="doListEmployees()">Get /api/employees/</button>
+            <div id="emp-list-response" class="response-box" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- EMPLOYEES: CSV UPLOAD -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Upload CSV (Bulk Import)</h3>
+            <span class="method post">POST</span>
+        </div>
+        <div class="card-body">
+            <div class="field"><label>CSV File</label><input type="file" id="csv-file" accept=".csv"></div>
+            <button class="btn btn-warning" onclick="doUploadCSV()">Upload CSV</button>
+            <div id="csv-response" class="response-box" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════ -->
+    <!-- POLICIES: UPLOAD -->
+    <!-- ════════════════════════════════════════════════ -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Upload Policy PDF</h3>
+            <span class="method post">POST</span>
+        </div>
+        <div class="card-body">
+            <div class="field"><label>Policy Title</label><input type="text" id="policy-title" value="Employee Handbook"></div>
+            <div class="field"><label>PDF File</label><input type="file" id="policy-file" accept=".pdf"></div>
+            <button class="btn btn-primary" onclick="doUploadPolicy()">Upload Policy</button>
+            <div id="policy-upload-response" class="response-box" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- POLICIES: LIST -->
+    <div class="card">
+        <div class="card-header">
+            <h3>List Policies</h3>
+            <span class="method get">GET</span>
+        </div>
+        <div class="card-body">
+            <button class="btn btn-primary" onclick="doListPolicies()">Get /api/policies/</button>
+            <div id="policy-list-response" class="response-box" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════ -->
+    <!-- ONBOARDING: START -->
+    <!-- ════════════════════════════════════════════════ -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Start Onboarding</h3>
+            <span class="method post">POST</span>
+        </div>
+        <div class="card-body">
+            <div class="field"><label>Employee ID</label><input type="number" id="onboard-emp-id" value="1"></div>
+            <button class="btn btn-success" onclick="doStartOnboarding()">Start Onboarding</button>
+            <div id="onboard-start-response" class="response-box" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- ONBOARDING: STATUS -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Onboarding Status</h3>
+            <span class="method get">GET</span>
+        </div>
+        <div class="card-body">
+            <div class="field"><label>Employee ID</label><input type="number" id="onboard-status-id" value="1"></div>
+            <button class="btn btn-primary" onclick="doGetOnboardingStatus()">Get Status</button>
+            <div id="onboard-status-response" class="response-box" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- ONBOARDING: SSE STREAM -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Onboarding Stream (SSE)</h3>
+            <span class="method get">GET</span>
+        </div>
+        <div class="card-body">
+            <div class="field"><label>Employee ID</label><input type="number" id="sse-emp-id" value="1"></div>
+            <div class="btn-row">
+                <button class="btn btn-success" onclick="doStartSSE()">Start Stream</button>
+                <button class="btn btn-danger" onclick="doStopSSE()">Stop</button>
+            </div>
+            <div id="sse-log" class="sse-log" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════ -->
+    <!-- CALENDAR: SCHEDULE ALL -->
+    <!-- ════════════════════════════════════════════════ -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Schedule All Events</h3>
+            <span class="method post">POST</span>
+        </div>
+        <div class="card-body">
+            <div class="field"><label>Employee ID</label><input type="number" id="cal-emp-id" value="1"></div>
+            <button class="btn btn-primary" onclick="doScheduleAll()">Schedule Events</button>
+            <div id="cal-response" class="response-box" style="display:none;"></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+const API = '';  // Same origin — served by FastAPI
+
+// ── Token management ────────────────────────────────────
+function getToken() { return document.getElementById('jwt-token').value; }
+
+function setToken(token) {
+    document.getElementById('jwt-token').value = token;
+    const status = document.getElementById('token-status');
+    status.textContent = 'Active ✓';
+    status.className = 'status active';
+}
+
+function clearToken() {
+    document.getElementById('jwt-token').value = '';
+    const status = document.getElementById('token-status');
+    status.textContent = 'No Token';
+    status.className = 'status inactive';
+}
+
+function authHeaders() {
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+}
+
+// ── Response display helper ─────────────────────────────
+function showResponse(id, data, isError = false) {
+    const el = document.getElementById(id);
+    el.style.display = 'block';
+    el.className = 'response-box' + (isError ? ' error' : '');
+    el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+}
+
+async function apiCall(url, options = {}) {
+    try {
+        const res = await fetch(API + url, options);
+        const data = await res.json();
+        return { ok: res.ok, data, status: res.status };
+    } catch (e) {
+        return { ok: false, data: { error: e.message }, status: 0 };
+    }
+}
+
+// ── AUTH ─────────────────────────────────────────────────
+async function doSignup() {
+    const body = {
+        name: document.getElementById('signup-name').value,
+        email: document.getElementById('signup-email').value,
+        password: document.getElementById('signup-password').value,
+    };
+    const { ok, data } = await apiCall('/api/auth/signup', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    showResponse('signup-response', data, !ok);
+}
+
+async function doLogin() {
+    const body = {
+        email: document.getElementById('login-email').value,
+        password: document.getElementById('login-password').value,
+    };
+    const { ok, data } = await apiCall('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    showResponse('login-response', data, !ok);
+    if (ok && data.access_token) setToken(data.access_token);
+}
+
+async function doGetMe() {
+    const { ok, data } = await apiCall('/api/auth/me', {
+        headers: authHeaders(),
+    });
+    showResponse('me-response', data, !ok);
+}
+
+// ── EMPLOYEES ───────────────────────────────────────────
+async function doCreateEmployee() {
+    const body = {
+        name: document.getElementById('emp-name').value,
+        email: document.getElementById('emp-email').value,
+        role: document.getElementById('emp-role').value,
+        department: document.getElementById('emp-dept').value,
+        start_date: document.getElementById('emp-date').value,
+        manager_email: document.getElementById('emp-manager').value || null,
+        buddy_email: document.getElementById('emp-buddy').value || null,
+    };
+    const { ok, data } = await apiCall('/api/employees/', {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
+    });
+    showResponse('emp-create-response', data, !ok);
+}
+
+async function doListEmployees() {
+    const { ok, data } = await apiCall('/api/employees/', {
+        headers: authHeaders(),
+    });
+    showResponse('emp-list-response', data, !ok);
+}
+
+async function doUploadCSV() {
+    const fileInput = document.getElementById('csv-file');
+    if (!fileInput.files.length) { showResponse('csv-response', 'Select a CSV file first', true); return; }
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    const token = getToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const { ok, data } = await apiCall('/api/employees/upload', {
+        method: 'POST', headers, body: formData,
+    });
+    showResponse('csv-response', data, !ok);
+}
+
+// ── POLICIES ────────────────────────────────────────────
+async function doUploadPolicy() {
+    const fileInput = document.getElementById('policy-file');
+    if (!fileInput.files.length) { showResponse('policy-upload-response', 'Select a PDF file first', true); return; }
+    const formData = new FormData();
+    formData.append('title', document.getElementById('policy-title').value);
+    formData.append('file', fileInput.files[0]);
+    const token = getToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const { ok, data } = await apiCall('/api/policies/upload', {
+        method: 'POST', headers, body: formData,
+    });
+    showResponse('policy-upload-response', data, !ok);
+}
+
+async function doListPolicies() {
+    const { ok, data } = await apiCall('/api/policies/', {
+        headers: authHeaders(),
+    });
+    showResponse('policy-list-response', data, !ok);
+}
+
+// ── ONBOARDING ──────────────────────────────────────────
+async function doStartOnboarding() {
+    const empId = document.getElementById('onboard-emp-id').value;
+    const { ok, data } = await apiCall(`/api/onboarding/${empId}/start`, {
+        method: 'POST', headers: authHeaders(),
+    });
+    showResponse('onboard-start-response', data, !ok);
+}
+
+async function doGetOnboardingStatus() {
+    const empId = document.getElementById('onboard-status-id').value;
+    const { ok, data } = await apiCall(`/api/onboarding/${empId}/status`, {
+        headers: authHeaders(),
+    });
+    showResponse('onboard-status-response', data, !ok);
+}
+
+// ── SSE Stream ──────────────────────────────────────────
+let eventSource = null;
+
+function doStartSSE() {
+    doStopSSE();
+    const empId = document.getElementById('sse-emp-id').value;
+    const logEl = document.getElementById('sse-log');
+    logEl.style.display = 'block';
+    logEl.innerHTML = '<div class="event">🔌 Connecting to stream...</div>';
+
+    eventSource = new EventSource(`${API}/api/onboarding/${empId}/stream`);
+
+    eventSource.onmessage = (e) => {
+        try {
+            const parsed = JSON.parse(e.data);
+            const event = parsed.event || 'message';
+            const detail = JSON.stringify(parsed.data, null, 2);
+            logEl.innerHTML += `<div class="event"><strong>[${event}]</strong> ${detail}</div>`;
+        } catch {
+            logEl.innerHTML += `<div class="event">${e.data}</div>`;
+        }
+        logEl.scrollTop = logEl.scrollHeight;
+    };
+
+    eventSource.onerror = () => {
+        logEl.innerHTML += '<div class="event" style="color:#fca5a5;">⚠️ Stream ended or error</div>';
+        doStopSSE();
+    };
+}
+
+function doStopSSE() {
+    if (eventSource) { eventSource.close(); eventSource = null; }
+}
+
+// ── CALENDAR ────────────────────────────────────────────
+async function doScheduleAll() {
+    const empId = document.getElementById('cal-emp-id').value;
+    const { ok, data } = await apiCall(`/api/calendar/schedule-all/${empId}`, {
+        method: 'POST', headers: authHeaders(),
+    });
+    showResponse('cal-response', data, !ok);
+}
+</script>
+
+</body>
+</html>
