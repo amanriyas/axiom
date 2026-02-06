@@ -74,7 +74,7 @@ class EmployeeUpdate(BaseModel):
     start_date: Optional[date] = None
     manager_email: Optional[EmailStr] = None
     buddy_email: Optional[EmailStr] = None
-    status: Optional[Literal["pending", "onboarding", "active", "offboarded"]] = None
+    status: Optional[Literal["pending", "onboarding", "completed", "failed"]] = None
 
 
 class EmployeeResponse(EmployeeBase):

@@ -6,8 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 
 from app.config import settings
 from app.database import create_tables
@@ -27,6 +26,15 @@ async def lifespan(app: FastAPI):
     # Create database tables
     create_tables()
     print("✅ Database tables created")
+
+    # Show AI provider status
+    from app.services.llm import _get_provider
+    provider = _get_provider()
+    if provider == "mock":
+        print("🤖 LLM: Mock mode (no API keys set)")
+    else:
+        print(f"🤖 LLM: Using {provider.upper()}")
+
     print(f"🚀 {settings.APP_NAME} is running")
     print("📄 Test page: http://localhost:8000/test")
     print("📚 API docs:  http://localhost:8000/docs")
@@ -65,9 +73,14 @@ app.include_router(calendar.router)
 @app.get("/", tags=["Root"])
 async def root():
     """API health check."""
+    from app.services.llm import _get_provider
+
+    provider = _get_provider()
     return {
         "name": settings.APP_NAME,
         "status": "running",
+        "ai_provider": provider,
+        "ai_status": "live" if provider != "mock" else "mock (no API keys)",
         "docs": "/docs",
         "test_page": "/test",
     }

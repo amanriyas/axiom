@@ -1,8 +1,13 @@
 # app/services/rag.py
-"""RAG (Retrieval-Augmented Generation) service — ChromaDB vector store for policy documents."""
+"""RAG (Retrieval-Augmented Generation) service — ChromaDB vector store for policy documents.
+
+Embedding priority:
+  1. Voyage AI (VOYAGE_API_KEY) — primary, 50M free tokens
+  2. OpenAI (OPENAI_API_KEY) — fallback
+  3. ChromaDB default (all-MiniLM-L6-v2) — offline fallback
+"""
 
 import os
-from typing import Optional
 
 from app.config import settings
 
@@ -15,7 +20,13 @@ _collection = None
 
 
 def _get_collection():
-    """Get or create the ChromaDB collection (lazy initialization)."""
+    """Get or create the ChromaDB collection (lazy initialization).
+    
+    Embedding priority:
+      1. Voyage AI (VOYAGE_API_KEY) — primary provider
+      2. OpenAI (OPENAI_API_KEY) — fallback
+      3. ChromaDB default sentence-transformer — offline fallback
+    """
     global _chroma_client, _collection
 
     if _collection is not None:
@@ -23,15 +34,52 @@ def _get_collection():
 
     try:
         import chromadb
-        from chromadb.config import Settings as ChromaSettings
 
         os.makedirs(CHROMA_DIR, exist_ok=True)
 
         _chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
-        _collection = _chroma_client.get_or_create_collection(
-            name="policy_documents",
-            metadata={"hnsw:space": "cosine"},
-        )
+
+        # Determine embedding function (priority: Voyage > OpenAI > default)
+        embedding_function = None
+
+        # 1. Try Voyage AI first
+        if settings.VOYAGE_API_KEY:
+            try:
+                from app.services.embeddings import VoyageEmbeddingFunction
+
+                embedding_function = VoyageEmbeddingFunction()
+                print(f"✅ RAG: Using Voyage AI embeddings (model: {embedding_function.model})")
+            except Exception as e:
+                print(f"⚠️  Voyage AI embedding init failed: {e}. Trying OpenAI fallback...")
+
+        # 2. Fall back to OpenAI
+        if embedding_function is None and settings.OPENAI_API_KEY:
+            try:
+                from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+
+                embedding_function = OpenAIEmbeddingFunction(
+                    api_key=settings.OPENAI_API_KEY,
+                    model_name=settings.OPENAI_EMBEDDING_MODEL,
+                )
+                print("✅ RAG: Using OpenAI embeddings (fallback)")
+            except Exception as e:
+                print(f"⚠️  OpenAI embedding init failed: {e}. Using default embeddings.")
+
+        # 3. Default
+        if embedding_function is None:
+            print("ℹ️  RAG: No embedding API key set — using default sentence-transformer embeddings")
+
+        if embedding_function:
+            _collection = _chroma_client.get_or_create_collection(
+                name="policy_documents",
+                metadata={"hnsw:space": "cosine"},
+                embedding_function=embedding_function,
+            )
+        else:
+            _collection = _chroma_client.get_or_create_collection(
+                name="policy_documents",
+                metadata={"hnsw:space": "cosine"},
+            )
         return _collection
     except ImportError:
         print("⚠️  ChromaDB not installed. RAG features will use mock mode.")

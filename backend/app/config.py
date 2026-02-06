@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     # ── AI / LLM ─────────────────────────────────────────────
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
+    LLM_PROVIDER: str = "openai"  # "openai" or "anthropic"
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"  # For RAG embeddings (fallback)
+
+    # ── Embeddings (Voyage AI) ───────────────────────────────
+    VOYAGE_API_KEY: str = ""
+    VOYAGE_EMBEDDING_MODEL: str = "voyage-2"
 
     # ── Google OAuth ─────────────────────────────────────────
     GOOGLE_CLIENT_ID: str = ""

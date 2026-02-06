@@ -17,6 +17,14 @@ from app.models import (
     WorkflowStatus,
 )
 from app.services import llm, rag
+from app.services.calendar import schedule_onboarding_events
+from app.prompts.templates import (
+    PARSE_DATA_PROMPT,
+    WELCOME_EMAIL_PROMPT,
+    OFFER_LETTER_PROMPT,
+    PLAN_30_60_90_PROMPT,
+    EQUIPMENT_REQUEST_PROMPT,
+)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -98,7 +106,7 @@ async def execute_step(db: Session, step: OnboardingStep, employee: Employee) ->
 
 
 async def _step_parse_data(employee: Employee) -> str:
-    """Step 1: Parse and validate employee data."""
+    """Step 1: Parse, validate, and summarize employee data using LLM."""
     data = {
         "employee_name": employee.name,
         "email": employee.email,
@@ -108,90 +116,97 @@ async def _step_parse_data(employee: Employee) -> str:
         "manager_email": employee.manager_email,
         "buddy_email": employee.buddy_email,
     }
-    return json.dumps({"parsed_data": data, "validation": "passed"})
+
+    prompt = PARSE_DATA_PROMPT.format(
+        name=employee.name,
+        email=employee.email,
+        role=employee.role,
+        department=employee.department,
+        start_date=employee.start_date.isoformat(),
+        manager_email=employee.manager_email or "Not assigned",
+        buddy_email=employee.buddy_email or "Not assigned",
+    )
+
+    validation_summary = await llm.generate_text(prompt=prompt)
+    return json.dumps({
+        "parsed_data": data,
+        "validation": "passed",
+        "ai_summary": validation_summary,
+    })
 
 
 async def _step_welcome_email(employee: Employee) -> str:
-    """Step 2: Generate welcome email using LLM."""
+    """Step 2: Generate welcome email using LLM + RAG context."""
     context_results = rag.query_policies("onboarding welcome email company culture")
     context = "\n".join([r["text"] for r in context_results])
 
-    prompt = f"""Generate a warm, professional welcome email for a new employee:
-    
-Name: {employee.name}
-Role: {employee.role}
-Department: {employee.department}
-Start Date: {employee.start_date}
-Manager: {employee.manager_email or 'TBD'}
-Buddy: {employee.buddy_email or 'TBD'}
-
-The email should welcome them, outline what to expect on day one, and express excitement about them joining."""
+    prompt = WELCOME_EMAIL_PROMPT.format(
+        name=employee.name,
+        role=employee.role,
+        department=employee.department,
+        start_date=employee.start_date.isoformat(),
+        manager_email=employee.manager_email or "TBD",
+        buddy_email=employee.buddy_email or "TBD",
+    )
 
     email_content = await llm.generate_text(prompt=prompt, context=context)
     return json.dumps({"type": "welcome_email", "content": email_content})
 
 
 async def _step_offer_letter(employee: Employee) -> str:
-    """Step 3: Generate offer letter using LLM + RAG."""
+    """Step 3: Generate offer letter using LLM + RAG context."""
     context_results = rag.query_policies("offer letter employment terms compensation")
     context = "\n".join([r["text"] for r in context_results])
 
-    prompt = f"""Generate a professional offer letter for:
-
-Name: {employee.name}
-Role: {employee.role}
-Department: {employee.department}
-Start Date: {employee.start_date}
-
-Include standard offer letter sections: position details, compensation placeholder, benefits summary, and acceptance instructions."""
+    prompt = OFFER_LETTER_PROMPT.format(
+        name=employee.name,
+        role=employee.role,
+        department=employee.department,
+        start_date=employee.start_date.isoformat(),
+        manager_email=employee.manager_email or "TBD",
+    )
 
     letter_content = await llm.generate_text(prompt=prompt, context=context)
     return json.dumps({"type": "offer_letter", "content": letter_content})
 
 
 async def _step_30_60_90_plan(employee: Employee) -> str:
-    """Step 4: Generate 30-60-90 day plan using LLM + RAG."""
+    """Step 4: Generate 30-60-90 day plan using LLM + RAG context."""
     context_results = rag.query_policies("onboarding plan training milestones")
     context = "\n".join([r["text"] for r in context_results])
 
-    prompt = f"""Create a comprehensive 30-60-90 day onboarding plan for:
-
-Name: {employee.name}
-Role: {employee.role}
-Department: {employee.department}
-
-Structure it as:
-- First 30 Days: Learning & Orientation
-- Days 31-60: Contributing & Collaborating  
-- Days 61-90: Leading & Delivering
-
-Include specific goals and milestones for each phase."""
+    prompt = PLAN_30_60_90_PROMPT.format(
+        name=employee.name,
+        role=employee.role,
+        department=employee.department,
+        start_date=employee.start_date.isoformat(),
+        manager_email=employee.manager_email or "TBD",
+    )
 
     plan_content = await llm.generate_text(prompt=prompt, context=context)
     return json.dumps({"type": "30_60_90_plan", "content": plan_content})
 
 
 async def _step_schedule_events(employee: Employee) -> str:
-    """Step 5: Schedule calendar events (mock implementation)."""
-    # This would integrate with the calendar service
-    events = [
-        {"type": "orientation", "title": f"Orientation - {employee.name}", "scheduled": True},
-        {"type": "manager_1on1", "title": f"1:1 with Manager - {employee.name}", "scheduled": True},
-        {"type": "buddy_meetup", "title": f"Buddy Meetup - {employee.name}", "scheduled": True},
-    ]
+    """Step 5: Schedule calendar events using the calendar service."""
+    events = schedule_onboarding_events(
+        employee_name=employee.name,
+        employee_email=employee.email,
+        start_date=employee.start_date,
+        manager_email=employee.manager_email,
+        buddy_email=employee.buddy_email,
+    )
     return json.dumps({"type": "calendar_events", "events": events})
 
 
 async def _step_equipment_request(employee: Employee) -> str:
     """Step 6: Generate equipment request using LLM."""
-    prompt = f"""Generate an IT equipment provisioning request for:
-
-Name: {employee.name}
-Role: {employee.role}
-Department: {employee.department}
-Start Date: {employee.start_date}
-
-Include standard equipment (laptop, monitor, peripherals) and software licenses needed for their role."""
+    prompt = EQUIPMENT_REQUEST_PROMPT.format(
+        name=employee.name,
+        role=employee.role,
+        department=employee.department,
+        start_date=employee.start_date.isoformat(),
+    )
 
     request_content = await llm.generate_text(prompt=prompt)
     return json.dumps({"type": "equipment_request", "content": request_content})
