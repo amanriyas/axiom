@@ -6,12 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models import Employee, User
 from app.schemas import (
     OnboardingStartResponse,
     OnboardingWorkflowResponse,
-    MessageResponse,
 )
 from app.services.auth import get_current_user
 from app.services.orchestrator import (
@@ -53,7 +52,7 @@ async def start_onboarding(
     workflow = create_workflow(db, employee_id)
 
     # Run the workflow in the background (non-blocking)
-    asyncio.create_task(_run_workflow_background(db, workflow.id))
+    asyncio.create_task(_run_workflow_background(workflow.id))
 
     return OnboardingStartResponse(
         workflow_id=workflow.id,
@@ -62,12 +61,15 @@ async def start_onboarding(
     )
 
 
-async def _run_workflow_background(db: Session, workflow_id: int):
-    """Run the workflow asynchronously without blocking the request."""
+async def _run_workflow_background(workflow_id: int):
+    """Run the workflow asynchronously with its own DB session."""
+    db = SessionLocal()
     try:
         await run_workflow(db, workflow_id)
     except Exception as e:
         print(f"⚠️  Background workflow {workflow_id} error: {e}")
+    finally:
+        db.close()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -116,9 +118,16 @@ async def stream_onboarding(
     if not workflow:
         workflow = create_workflow(db, employee_id)
 
+    workflow_id = workflow.id  # Capture ID before request session closes
+
     async def event_generator():
-        async for event_data in run_workflow_stream(db, workflow.id):
-            yield f"data: {event_data}\n\n"
+        # Create a fresh DB session for the long-lived SSE stream
+        stream_db = SessionLocal()
+        try:
+            async for event_data in run_workflow_stream(stream_db, workflow_id):
+                yield f"data: {event_data}\n\n"
+        finally:
+            stream_db.close()
 
     return StreamingResponse(
         event_generator(),

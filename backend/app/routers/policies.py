@@ -8,6 +8,7 @@ from app.database import get_db
 from app.schemas import PolicyResponse, MessageResponse
 from app.services import policy as policy_service
 from app.services.auth import get_current_user
+from app.services.rag import embed_policy, delete_policy_embeddings
 from app.models import User
 
 router = APIRouter(prefix="/api/policies", tags=["Policies"])
@@ -52,6 +53,17 @@ async def upload_policy(
         )
 
     policy = policy_service.save_policy(db, title=title, filename=file.filename, file_content=content)
+
+    # Embed the policy into the RAG vector store
+    try:
+        num_chunks = embed_policy(policy.id, policy.file_path, policy.title)
+        if num_chunks > 0:
+            policy.is_embedded = True
+            db.commit()
+            db.refresh(policy)
+    except Exception as e:
+        print(f"⚠️  RAG embedding failed for policy {policy.id}: {e}")
+
     return policy
 
 
@@ -83,6 +95,9 @@ async def delete_policy(
     current_user: User = Depends(get_current_user),
 ):
     """Delete a policy document and its file."""
+    # Remove RAG embeddings first
+    delete_policy_embeddings(policy_id)
+
     deleted = policy_service.delete_policy(db, policy_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Policy not found")

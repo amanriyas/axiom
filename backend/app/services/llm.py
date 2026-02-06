@@ -1,8 +1,8 @@
 # app/services/llm.py
 """LLM integration — OpenAI GPT-4 / Anthropic Claude for document generation."""
 
-import json
-from typing import Optional, AsyncGenerator
+import asyncio
+from typing import AsyncGenerator
 
 from app.config import settings
 
@@ -44,7 +44,7 @@ async def generate_text_stream(
         async for chunk in _stream_anthropic(prompt, system_prompt, context):
             yield chunk
     else:
-        for chunk in _mock_stream(prompt):
+        async for chunk in _mock_stream(prompt):
             yield chunk
 
 
@@ -54,16 +54,16 @@ async def generate_text_stream(
 
 async def _generate_openai(prompt: str, system_prompt: str, context: str) -> str:
     """Generate text using OpenAI GPT-4."""
-    from openai import OpenAI
+    from openai import AsyncOpenAI
 
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
     messages = [{"role": "system", "content": system_prompt}]
     if context:
         messages.append({"role": "user", "content": f"Reference context:\n{context}"})
     messages.append({"role": "user", "content": prompt})
 
-    response = client.chat.completions.create(
+    response = await client.chat.completions.create(
         model="gpt-4",
         messages=messages,
         temperature=0.7,
@@ -74,23 +74,23 @@ async def _generate_openai(prompt: str, system_prompt: str, context: str) -> str
 
 async def _stream_openai(prompt: str, system_prompt: str, context: str) -> AsyncGenerator[str, None]:
     """Stream text from OpenAI."""
-    from openai import OpenAI
+    from openai import AsyncOpenAI
 
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
     messages = [{"role": "system", "content": system_prompt}]
     if context:
         messages.append({"role": "user", "content": f"Reference context:\n{context}"})
     messages.append({"role": "user", "content": prompt})
 
-    stream = client.chat.completions.create(
+    stream = await client.chat.completions.create(
         model="gpt-4",
         messages=messages,
         temperature=0.7,
         max_tokens=2000,
         stream=True,
     )
-    for chunk in stream:
+    async for chunk in stream:
         if chunk.choices[0].delta.content:
             yield chunk.choices[0].delta.content
 
@@ -101,15 +101,15 @@ async def _stream_openai(prompt: str, system_prompt: str, context: str) -> Async
 
 async def _generate_anthropic(prompt: str, system_prompt: str, context: str) -> str:
     """Generate text using Anthropic Claude."""
-    from anthropic import Anthropic
+    from anthropic import AsyncAnthropic
 
-    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 
     user_content = prompt
     if context:
         user_content = f"Reference context:\n{context}\n\n{prompt}"
 
-    message = client.messages.create(
+    message = await client.messages.create(
         model="claude-3-sonnet-20240229",
         max_tokens=2000,
         system=system_prompt,
@@ -120,21 +120,21 @@ async def _generate_anthropic(prompt: str, system_prompt: str, context: str) -> 
 
 async def _stream_anthropic(prompt: str, system_prompt: str, context: str) -> AsyncGenerator[str, None]:
     """Stream text from Anthropic Claude."""
-    from anthropic import Anthropic
+    from anthropic import AsyncAnthropic
 
-    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 
     user_content = prompt
     if context:
         user_content = f"Reference context:\n{context}\n\n{prompt}"
 
-    with client.messages.stream(
+    async with client.messages.stream(
         model="claude-3-sonnet-20240229",
         max_tokens=2000,
         system=system_prompt,
         messages=[{"role": "user", "content": user_content}],
     ) as stream:
-        for text in stream.text_stream:
+        async for text in stream.text_stream:
             yield text
 
 
@@ -208,9 +208,10 @@ def _mock_generate(prompt: str) -> str:
         return f"[Mock LLM Response]\n\nGenerated content for prompt: {prompt[:100]}..."
 
 
-def _mock_stream(prompt: str):
+async def _mock_stream(prompt: str):
     """Yield mock content word-by-word for streaming simulation."""
     response = _mock_generate(prompt)
     words = response.split(" ")
     for word in words:
+        await asyncio.sleep(0.03)  # Simulate realistic token delay
         yield word + " "

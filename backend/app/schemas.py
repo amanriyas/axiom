@@ -2,7 +2,7 @@
 """Pydantic V2 schemas for request / response validation."""
 
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -74,7 +74,7 @@ class EmployeeUpdate(BaseModel):
     start_date: Optional[date] = None
     manager_email: Optional[EmailStr] = None
     buddy_email: Optional[EmailStr] = None
-    status: Optional[str] = None
+    status: Optional[Literal["pending", "onboarding", "active", "offboarded"]] = None
 
 
 class EmployeeResponse(EmployeeBase):

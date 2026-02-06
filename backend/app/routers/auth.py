@@ -58,7 +58,7 @@ async def login(payload: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid email or password",
         )
 
-    token = create_access_token(data={"sub": user.id, "email": user.email})
+    token = create_access_token(data={"sub": str(user.id), "email": user.email})
     return Token(access_token=token)
 
 
@@ -99,7 +99,7 @@ async def google_auth(payload: GoogleAuth, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
 
-    token = create_access_token(data={"sub": user.id, "email": user.email})
+    token = create_access_token(data={"sub": str(user.id), "email": user.email})
     return Token(access_token=token)
 
 
