@@ -10,8 +10,17 @@ interface StatsCardProps {
   trend?: number;
   trendLabel?: string;
   icon?: React.ReactNode;
+  iconColor?: "emerald" | "blue" | "purple" | "orange" | "red";
   className?: string;
 }
+
+const iconColorClasses = {
+  emerald: "bg-emerald-500/10 text-emerald-400 shadow-emerald-500/20",
+  blue: "bg-blue-500/10 text-blue-400 shadow-blue-500/20",
+  purple: "bg-purple-500/10 text-purple-400 shadow-purple-500/20",
+  orange: "bg-orange-500/10 text-orange-400 shadow-orange-500/20",
+  red: "bg-red-500/10 text-red-400 shadow-red-500/20",
+};
 
 export function StatsCard({
   title,
@@ -19,41 +28,52 @@ export function StatsCard({
   trend,
   trendLabel,
   icon,
+  iconColor = "emerald",
   className,
 }: StatsCardProps) {
   const isPositive = trend !== undefined && trend > 0;
   const isNegative = trend !== undefined && trend < 0;
 
   return (
-    <Card className={cn("", className)}>
-      <CardContent className="p-6">
+    <Card className={cn("overflow-hidden", className)}>
+      <CardContent className="p-5">
         <div className="flex items-start justify-between">
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">{title}</p>
-            <p className="text-3xl font-bold">{value}</p>
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            <p className="text-3xl font-bold tracking-tight">{value}</p>
             {trend !== undefined && (
-              <div className="flex items-center gap-1 text-sm">
+              <div className="flex items-center gap-1.5 text-sm">
                 {isPositive ? (
-                  <TrendingUp className="h-4 w-4 text-[#22c55e]" />
+                  <div className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5">
+                    <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+                    <span className="text-emerald-400 text-xs font-medium">
+                      +{trend}{trendLabel || ""}
+                    </span>
+                  </div>
                 ) : isNegative ? (
-                  <TrendingDown className="h-4 w-4 text-[#ef4444]" />
-                ) : null}
-                <span
-                  className={cn(
-                    isPositive && "text-[#22c55e]",
-                    isNegative && "text-[#ef4444]",
-                    !isPositive && !isNegative && "text-muted-foreground"
-                  )}
-                >
-                  {trend > 0 ? "+" : ""}
-                  {trend}
-                  {trendLabel || ""}
-                </span>
+                  <div className="flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5">
+                    <TrendingDown className="h-3.5 w-3.5 text-red-400" />
+                    <span className="text-red-400 text-xs font-medium">
+                      {trend}{trendLabel || ""}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground text-xs">
+                    {trend}{trendLabel || ""}
+                  </span>
+                )}
               </div>
             )}
           </div>
           {icon && (
-            <div className="rounded-lg bg-primary/10 p-3">{icon}</div>
+            <div
+              className={cn(
+                "rounded-xl p-3 shadow-lg transition-all duration-300",
+                iconColorClasses[iconColor]
+              )}
+            >
+              {icon}
+            </div>
           )}
         </div>
       </CardContent>
