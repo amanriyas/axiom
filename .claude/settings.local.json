@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@latest:*)",
+      "Bash(npx shadcn@latest init:*)",
+      "Bash(npx shadcn@latest add button card input label select textarea dialog alert-dialog dropdown-menu table tabs toast avatar badge form separator skeleton progress scroll-area --yes)",
+      "Bash(npx shadcn@latest add button card input label select textarea dialog alert-dialog dropdown-menu table tabs sonner avatar badge form separator skeleton progress scroll-area --yes)",
+      "Bash(npm install:*)",
+      "Bash(dir:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm ls:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}
