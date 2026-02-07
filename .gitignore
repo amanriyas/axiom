@@ -57,8 +57,9 @@ eggs/
 sdist/
 develop-eggs/
 .installed.cfg
-lib/
-lib64/
+# Python lib directories (use /lib/ to avoid matching frontend/src/lib/)
+/lib/
+/lib64/
 parts/
 var/
 wheels/
