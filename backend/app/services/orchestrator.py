@@ -274,12 +274,13 @@ async def run_workflow(db: Session, workflow_id: int) -> OnboardingWorkflow:
 async def run_workflow_stream(db: Session, workflow_id: int) -> AsyncGenerator[str, None]:
     """
     Execute workflow and yield SSE events for real-time updates.
-    
-    Yields JSON strings in SSE format for the Agent Thinking Panel.
+
+    Yields JSON strings matching the frontend AgentEvent interface:
+      { type, message, timestamp, step_type?, step_status? }
     """
     workflow = get_workflow_by_id(db, workflow_id)
     if not workflow:
-        yield _sse_event("error", {"message": f"Workflow {workflow_id} not found"})
+        yield _sse_event("error", "Workflow not found")
         return
 
     employee = workflow.employee
@@ -290,39 +291,61 @@ async def run_workflow_stream(db: Session, workflow_id: int) -> AsyncGenerator[s
     employee.status = EmployeeStatus.ONBOARDING
     db.commit()
 
-    yield _sse_event("workflow_started", {
-        "workflow_id": workflow.id,
-        "employee_name": employee.name,
-    })
+    yield _sse_event("init", f"Starting onboarding for {employee.name}")
 
     try:
         for step in workflow.steps:
+            step_label = step.step_type.value.replace("_", " ").title()
+
             # Mark step as running
             step.status = StepStatus.RUNNING
             step.started_at = datetime.utcnow()
             db.commit()
 
-            yield _sse_event("step_started", {
-                "step_id": step.id,
-                "step_type": step.step_type.value,
-                "step_order": step.step_order,
-            })
+            yield _sse_event(
+                "task",
+                f"Step {step.step_order}: {step_label}",
+                step_type=step.step_type.value,
+                step_status="running",
+            )
 
             try:
-                # Simulate thinking with streaming
-                yield _sse_event("thinking", {"message": f"Processing {step.step_type.value}..."})
+                # Thinking event — shows in Agent Reasoning panel
+                yield _sse_event(
+                    "think",
+                    f"Preparing prompt for {step_label}...",
+                    step_type=step.step_type.value,
+                )
 
                 result = await execute_step(db, step, employee)
+
+                # Preview of generated content
+                preview = result[:150].replace("\n", " ") if result else "Done"
+                yield _sse_event(
+                    "think",
+                    f"Generated: {preview}...",
+                    step_type=step.step_type.value,
+                )
+
                 step.status = StepStatus.COMPLETED
                 step.result = result
                 step.completed_at = datetime.utcnow()
                 db.commit()
 
-                yield _sse_event("step_completed", {
-                    "step_id": step.id,
-                    "step_type": step.step_type.value,
-                    "result_preview": result[:200] if result else None,
-                })
+                yield _sse_event(
+                    "done",
+                    f"\u2713 {step_label} complete",
+                    step_type=step.step_type.value,
+                    step_status="completed",
+                )
+
+                # step_update triggers frontend workflow refresh
+                yield _sse_event(
+                    "step_update",
+                    f"Step {step.step_order} completed",
+                    step_type=step.step_type.value,
+                    step_status="completed",
+                )
 
             except Exception as e:
                 step.status = StepStatus.FAILED
@@ -330,11 +353,12 @@ async def run_workflow_stream(db: Session, workflow_id: int) -> AsyncGenerator[s
                 step.completed_at = datetime.utcnow()
                 db.commit()
 
-                yield _sse_event("step_failed", {
-                    "step_id": step.id,
-                    "step_type": step.step_type.value,
-                    "error": str(e),
-                })
+                yield _sse_event(
+                    "error",
+                    f"\u2717 {step_label} failed: {str(e)}",
+                    step_type=step.step_type.value,
+                    step_status="failed",
+                )
                 raise
 
         # All steps completed
@@ -343,10 +367,10 @@ async def run_workflow_stream(db: Session, workflow_id: int) -> AsyncGenerator[s
         employee.status = EmployeeStatus.COMPLETED
         db.commit()
 
-        yield _sse_event("workflow_completed", {
-            "workflow_id": workflow.id,
-            "total_steps": len(workflow.steps),
-        })
+        yield _sse_event(
+            "done",
+            f"Onboarding complete for {employee.name} — all {len(workflow.steps)} steps finished",
+        )
 
     except Exception as e:
         workflow.status = WorkflowStatus.FAILED
@@ -355,12 +379,27 @@ async def run_workflow_stream(db: Session, workflow_id: int) -> AsyncGenerator[s
         employee.status = EmployeeStatus.FAILED
         db.commit()
 
-        yield _sse_event("workflow_failed", {
-            "workflow_id": workflow.id,
-            "error": str(e),
-        })
+        yield _sse_event("error", f"Workflow failed: {str(e)}")
 
 
-def _sse_event(event_type: str, data: dict) -> str:
-    """Format an SSE event."""
-    return json.dumps({"event": event_type, "data": data})
+def _sse_event(
+    event_type: str,
+    message: str,
+    step_type: str | None = None,
+    step_status: str | None = None,
+) -> str:
+    """
+    Format an SSE event matching the frontend AgentEvent interface.
+
+    Frontend expects: { type, message, timestamp, step_type?, step_status? }
+    """
+    event: dict = {
+        "type": event_type,
+        "message": message,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    if step_type:
+        event["step_type"] = step_type
+    if step_status:
+        event["step_status"] = step_status
+    return json.dumps(event)

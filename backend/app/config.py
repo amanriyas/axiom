@@ -28,7 +28,9 @@ class Settings(BaseSettings):
     # ── AI / LLM ─────────────────────────────────────────────
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
-    LLM_PROVIDER: str = "openai"  # "openai" or "anthropic"
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    LLM_PROVIDER: str = "openai"  # "openai", "anthropic", or "groq"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"  # For RAG embeddings (fallback)
 
     # ── Embeddings (Voyage AI) ───────────────────────────────

@@ -17,12 +17,16 @@ def _get_provider() -> str:
     provider = settings.LLM_PROVIDER.lower()
 
     # If the preferred provider has a key, use it
+    if provider == "groq" and settings.GROQ_API_KEY:
+        return "groq"
     if provider == "openai" and settings.OPENAI_API_KEY:
         return "openai"
     if provider == "anthropic" and settings.ANTHROPIC_API_KEY:
         return "anthropic"
 
     # Fallback: use whichever key is available
+    if settings.GROQ_API_KEY:
+        return "groq"
     if settings.OPENAI_API_KEY:
         return "openai"
     if settings.ANTHROPIC_API_KEY:
@@ -44,7 +48,9 @@ async def generate_text(
     """
     provider = _get_provider()
 
-    if provider == "openai":
+    if provider == "groq":
+        return await _generate_groq(prompt, system_prompt, context)
+    elif provider == "openai":
         return await _generate_openai(prompt, system_prompt, context)
     elif provider == "anthropic":
         return await _generate_anthropic(prompt, system_prompt, context)
@@ -64,7 +70,10 @@ async def generate_text_stream(
     """
     provider = _get_provider()
 
-    if provider == "openai":
+    if provider == "groq":
+        async for chunk in _stream_groq(prompt, system_prompt, context):
+            yield chunk
+    elif provider == "openai":
         async for chunk in _stream_openai(prompt, system_prompt, context):
             yield chunk
     elif provider == "anthropic":
@@ -73,6 +82,65 @@ async def generate_text_stream(
     else:
         async for chunk in _mock_stream(prompt):
             yield chunk
+
+
+def _build_messages(prompt: str, system_prompt: str, context: str) -> list[dict]:
+    """Build the messages array used by OpenAI-compatible APIs (OpenAI, Groq)."""
+    messages = [{"role": "system", "content": system_prompt}]
+    if context:
+        messages.append({
+            "role": "user",
+            "content": f"Use the following company policy context to inform your response:\n\n{context}",
+        })
+    messages.append({"role": "user", "content": prompt})
+    return messages
+
+
+# ─────────────────────────────────────────────────────────────
+# Groq implementation (OpenAI-compatible API)
+# ─────────────────────────────────────────────────────────────
+
+async def _generate_groq(prompt: str, system_prompt: str, context: str) -> str:
+    """Generate text using Groq (Llama 3.3, Mixtral, etc.)."""
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(
+        api_key=settings.GROQ_API_KEY,
+        base_url="https://api.groq.com/openai/v1",
+    )
+
+    messages = _build_messages(prompt, system_prompt, context)
+
+    response = await client.chat.completions.create(
+        model=settings.GROQ_MODEL,
+        messages=messages,
+        temperature=0.7,
+        max_tokens=2000,
+    )
+    return response.choices[0].message.content or ""
+
+
+async def _stream_groq(prompt: str, system_prompt: str, context: str) -> AsyncGenerator[str, None]:
+    """Stream text from Groq."""
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(
+        api_key=settings.GROQ_API_KEY,
+        base_url="https://api.groq.com/openai/v1",
+    )
+
+    messages = _build_messages(prompt, system_prompt, context)
+
+    stream = await client.chat.completions.create(
+        model=settings.GROQ_MODEL,
+        messages=messages,
+        temperature=0.7,
+        max_tokens=2000,
+        stream=True,
+    )
+    async for chunk in stream:
+        if chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
 
 
 # ─────────────────────────────────────────────────────────────
@@ -85,13 +153,7 @@ async def _generate_openai(prompt: str, system_prompt: str, context: str) -> str
 
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-    messages = [{"role": "system", "content": system_prompt}]
-    if context:
-        messages.append({
-            "role": "user",
-            "content": f"Use the following company policy context to inform your response:\n\n{context}",
-        })
-    messages.append({"role": "user", "content": prompt})
+    messages = _build_messages(prompt, system_prompt, context)
 
     response = await client.chat.completions.create(
         model="gpt-4",
@@ -108,13 +170,7 @@ async def _stream_openai(prompt: str, system_prompt: str, context: str) -> Async
 
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-    messages = [{"role": "system", "content": system_prompt}]
-    if context:
-        messages.append({
-            "role": "user",
-            "content": f"Use the following company policy context to inform your response:\n\n{context}",
-        })
-    messages.append({"role": "user", "content": prompt})
+    messages = _build_messages(prompt, system_prompt, context)
 
     stream = await client.chat.completions.create(
         model="gpt-4",
