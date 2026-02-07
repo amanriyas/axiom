@@ -23,6 +23,10 @@ import {
   ChevronDown,
   ChevronRight,
   Users,
+  Globe,
+  FileSignature,
+  Shield,
+  DollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,8 +51,12 @@ import { Employee, OnboardingWorkflow, StepType, StepStatus } from "@/types";
 
 const stepConfig: Record<StepType, { label: string; icon: React.ElementType }> = {
   parse_data: { label: "Parse Employee Data", icon: FileText },
+  detect_jurisdiction: { label: "Detect Jurisdiction", icon: Globe },
+  employment_contract: { label: "Employment Contract", icon: FileSignature },
+  nda: { label: "Non-Disclosure Agreement", icon: Shield },
+  equity_agreement: { label: "Equity Agreement", icon: DollarSign },
+  offer_letter: { label: "Offer Letter", icon: FileText },
   welcome_email: { label: "Generate Welcome Email", icon: Mail },
-  offer_letter: { label: "Generate Offer Letter", icon: FileText },
   plan_30_60_90: { label: "Create 30-60-90 Plan", icon: FileText },
   schedule_events: { label: "Schedule Events", icon: Calendar },
   equipment_request: { label: "Equipment Request", icon: Monitor },
@@ -56,8 +64,12 @@ const stepConfig: Record<StepType, { label: string; icon: React.ElementType }> =
 
 const stepOrder: StepType[] = [
   "parse_data",
-  "welcome_email",
+  "detect_jurisdiction",
+  "employment_contract",
+  "nda",
+  "equity_agreement",
   "offer_letter",
+  "welcome_email",
   "plan_30_60_90",
   "schedule_events",
   "equipment_request",
@@ -152,7 +164,7 @@ export default function OnboardingWorkflowPage() {
     try {
       const wf = await onboardingApi.getStatus(employeeId);
       setWorkflow(wf);
-      setIsPaused(wf.status === "paused");
+      setIsPaused(wf.status === "paused" || wf.status === "awaiting_approval");
     } catch {
       // Ignore errors during polling
     }
@@ -189,7 +201,9 @@ export default function OnboardingWorkflowPage() {
     try {
       await onboardingApi.resume(employeeId);
       setIsPaused(false);
-      toast.info("Workflow resumed");
+      toast.success("Workflow resumed — executing remaining steps");
+      // Reconnect SSE stream to watch remaining steps execute live
+      setStreamUrl(onboardingApi.getStreamUrl(employeeId));
       await fetchWorkflowStatus();
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Failed to resume";
@@ -669,7 +683,7 @@ export default function OnboardingWorkflowPage() {
             variant="default"
             size="sm"
             onClick={handleResume}
-            disabled={!workflow || !isPaused || workflow.status !== "paused"}
+            disabled={!workflow || !(["paused", "awaiting_approval"] as string[]).includes(workflow.status)}
             className="bg-[#14b8a6] hover:bg-[#14b8a6]/90"
           >
             <Play className="mr-2 h-4 w-4" />
@@ -688,6 +702,8 @@ export default function OnboardingWorkflowPage() {
             </>
           ) : workflow?.status === "pending" ? (
             <span className="text-muted-foreground">Waiting to start...</span>
+          ) : workflow?.status === "awaiting_approval" ? (
+            <span className="font-medium text-yellow-500">⏸ Awaiting document approvals...</span>
           ) : workflow ? (
             <span className="text-muted-foreground">
               {completedCount} of {totalSteps} steps completed

@@ -14,6 +14,15 @@ import {
   MessageResponse,
   BulkUploadResponse,
   Notification,
+  JurisdictionInfo,
+  JurisdictionTemplate,
+  GeneratedDocument,
+  ApprovalRequest,
+  ChatConversation,
+  ChatMessage,
+  ComplianceItem,
+  ComplianceSummary,
+  CompliancePrediction,
 } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -235,5 +244,139 @@ export const onboardingApi = {
     apiFetch("/api/onboarding/templates", {
       method: "PUT",
       body: JSON.stringify(templates),
+    }),
+};
+
+// Jurisdiction API
+export const jurisdictionApi = {
+  list: (): Promise<JurisdictionInfo[]> =>
+    apiFetch("/api/jurisdictions"),
+
+  get: (code: string): Promise<JurisdictionInfo> =>
+    apiFetch(`/api/jurisdictions/${code}`),
+
+  getTemplates: (code: string): Promise<JurisdictionTemplate[]> =>
+    apiFetch(`/api/jurisdictions/${code}/templates`),
+};
+
+// Document API
+export const documentApi = {
+  getByEmployee: (employeeId: number): Promise<GeneratedDocument[]> =>
+    apiFetch(`/api/documents/employee/${employeeId}`),
+
+  get: (id: number): Promise<GeneratedDocument> =>
+    apiFetch(`/api/documents/${id}`),
+
+  update: (id: number, data: { content?: string; status?: string }): Promise<GeneratedDocument> =>
+    apiFetch(`/api/documents/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  getDownloadUrl: (id: number): string =>
+    `${API_URL}/api/documents/${id}/download`,
+};
+
+// Approval API
+export const approvalApi = {
+  list: (): Promise<ApprovalRequest[]> =>
+    apiFetch("/api/approvals"),
+
+  getPendingCount: (): Promise<{ count: number }> =>
+    apiFetch("/api/approvals/pending/count"),
+
+  get: (id: number): Promise<ApprovalRequest> =>
+    apiFetch(`/api/approvals/${id}`),
+
+  approve: (id: number, notes?: string): Promise<ApprovalRequest> =>
+    apiFetch(`/api/approvals/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ action: "approve", notes }),
+    }),
+
+  reject: (id: number, notes?: string): Promise<ApprovalRequest> =>
+    apiFetch(`/api/approvals/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ action: "reject", notes }),
+    }),
+
+  requestRevision: (id: number, notes?: string): Promise<ApprovalRequest> =>
+    apiFetch(`/api/approvals/${id}/revision`, {
+      method: "POST",
+      body: JSON.stringify({ action: "revision", notes }),
+    }),
+
+  getByEmployee: (employeeId: number): Promise<ApprovalRequest[]> =>
+    apiFetch(`/api/approvals/employee/${employeeId}`),
+};
+
+// Chat API
+export const chatApi = {
+  createConversation: (title?: string): Promise<ChatConversation> =>
+    apiFetch("/api/chat/conversations", {
+      method: "POST",
+      body: JSON.stringify({ title }),
+    }),
+
+  listConversations: (): Promise<ChatConversation[]> =>
+    apiFetch("/api/chat/conversations"),
+
+  getConversation: (id: number): Promise<ChatConversation> =>
+    apiFetch(`/api/chat/conversations/${id}`),
+
+  getMessages: (conversationId: number): Promise<ChatMessage[]> =>
+    apiFetch(`/api/chat/conversations/${conversationId}/messages`),
+
+  sendMessage: (conversationId: number, content: string): Promise<ChatMessage> =>
+    apiFetch(`/api/chat/conversations/${conversationId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }),
+
+  deleteConversation: (id: number): Promise<MessageResponse> =>
+    apiFetch(`/api/chat/conversations/${id}`, { method: "DELETE" }),
+
+  clearAll: (): Promise<MessageResponse> =>
+    apiFetch("/api/chat/conversations", { method: "DELETE" }),
+
+  getStreamUrl: (conversationId: number, content: string): string => {
+    const token = getToken();
+    const base = `${API_URL}/api/chat/conversations/${conversationId}/stream`;
+    const params = new URLSearchParams();
+    if (token) params.set("token", token);
+    params.set("content", content);
+    return `${base}?${params.toString()}`;
+  },
+};
+
+// Compliance API
+export const complianceApi = {
+  list: (): Promise<ComplianceItem[]> =>
+    apiFetch("/api/compliance"),
+
+  getSummary: (): Promise<ComplianceSummary> =>
+    apiFetch("/api/compliance/summary"),
+
+  getAlerts: (): Promise<ComplianceItem[]> =>
+    apiFetch("/api/compliance/alerts"),
+
+  getExpired: (): Promise<ComplianceItem[]> =>
+    apiFetch("/api/compliance/expired"),
+
+  getPredictions: (): Promise<CompliancePrediction[]> =>
+    apiFetch("/api/compliance/predictions"),
+
+  getByEmployee: (employeeId: number): Promise<ComplianceItem[]> =>
+    apiFetch(`/api/compliance/employee/${employeeId}`),
+
+  create: (data: {
+    employee_id: number;
+    item_type: string;
+    description: string;
+    expiry_date?: string;
+  }): Promise<ComplianceItem> =>
+    apiFetch("/api/compliance", {
+      method: "POST",
+      body: JSON.stringify(data),
     }),
 };

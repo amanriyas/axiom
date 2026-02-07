@@ -102,56 +102,97 @@ The developer may manually modify code at any time. Always:
 ```
 zero-touch-onboarding/
 ├── frontend/                    # Next.js application
-│   ├── app/                     # App Router pages
-│   │   ├── page.tsx             # Landing + upload
-│   │   ├── layout.tsx           # Root layout
-│   │   ├── (auth)/              # Auth routes group
-│   │   │   ├── login/
-│   │   │   └── signup/
-│   │   ├── dashboard/           # Main dashboard
-│   │   ├── employees/           # Employee management
-│   │   ├── onboarding/          # Workflow visualizer
-│   │   │   └── [id]/
-│   │   ├── policies/            # Policy document manager
-│   │   └── settings/            # App settings + OAuth
-│   ├── components/
-│   │   ├── ui/                  # shadcn/ui components
-│   │   ├── layout/              # Layout components
-│   │   ├── onboarding/          # Onboarding-specific components
-│   │   └── shared/              # Shared/common components
-│   ├── lib/
-│   │   ├── api.ts               # API client
-│   │   ├── auth.ts              # Auth utilities
-│   │   └── utils.ts             # General utilities
-│   ├── hooks/                   # Custom React hooks
-│   ├── types/                   # TypeScript types
-│   ├── styles/                  # Global styles
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── page.tsx             # Landing + upload
+│   │   │   ├── layout.tsx           # Root layout
+│   │   │   ├── providers.tsx        # Client providers
+│   │   │   ├── globals.css          # Global styles
+│   │   │   ├── (auth)/              # Auth routes group
+│   │   │   │   ├── layout.tsx
+│   │   │   │   ├── login/page.tsx
+│   │   │   │   └── signup/page.tsx
+│   │   │   └── (dashboard)/         # Dashboard route group
+│   │   │       ├── layout.tsx
+│   │   │       ├── dashboard/page.tsx       # Main dashboard
+│   │   │       ├── employees/page.tsx       # Employee management + jurisdiction
+│   │   │       ├── onboarding/page.tsx      # Onboarding list
+│   │   │       │   └── [id]/page.tsx        # Workflow visualizer (10 steps)
+│   │   │       ├── policies/page.tsx        # Policy document manager
+│   │   │       ├── approvals/page.tsx       # Document approval workflow ★ NEW
+│   │   │       ├── chat/page.tsx            # Policy chatbot ★ NEW
+│   │   │       ├── compliance/page.tsx      # Compliance tracking ★ NEW
+│   │   │       └── settings/page.tsx        # App settings + OAuth
+│   │   ├── components/
+│   │   │   ├── ui/                  # shadcn/ui components (20+)
+│   │   │   ├── layout/
+│   │   │   │   ├── sidebar.tsx      # Navigation with dynamic badges
+│   │   │   │   └── top-nav.tsx      # Top navigation bar
+│   │   │   └── onboarding/
+│   │   │       ├── workflow-graph.tsx  # 10-step DAG with approval gate
+│   │   │       ├── workflow-node.tsx   # Custom node with 10 step icons
+│   │   │       └── index.ts
+│   │   ├── lib/
+│   │   │   ├── api.ts               # API client (9 namespaces)
+│   │   │   └── utils.ts             # General utilities
+│   │   ├── hooks/
+│   │   │   ├── use-auth.tsx         # Auth hook
+│   │   │   └── use-sse-stream.ts    # SSE streaming hook
+│   │   └── types/
+│   │       └── index.ts             # All TypeScript types
 │   └── public/                  # Static assets
 │
 ├── backend/                     # FastAPI application
 │   ├── app/
-│   │   ├── main.py              # FastAPI entry point
+│   │   ├── main.py              # FastAPI entry point (10 routers, startup seeds)
 │   │   ├── config.py            # Configuration
 │   │   ├── database.py          # Database connection
-│   │   ├── models.py            # SQLAlchemy models
-│   │   ├── schemas.py           # Pydantic schemas
+│   │   ├── models.py            # SQLAlchemy models (19 classes)
+│   │   ├── schemas.py           # Pydantic V2 schemas
 │   │   ├── routers/
 │   │   │   ├── auth.py          # Authentication routes
 │   │   │   ├── employees.py     # Employee CRUD
-│   │   │   ├── policies.py      # Policy management
-│   │   │   ├── onboarding.py    # Onboarding orchestration
-│   │   │   └── calendar.py      # Google Calendar integration
+│   │   │   ├── policies.py      # Policy management + RAG upload
+│   │   │   ├── onboarding.py    # Onboarding orchestration + SSE
+│   │   │   ├── calendar.py      # Google Calendar integration
+│   │   │   ├── jurisdictions.py # Jurisdiction templates ★ NEW
+│   │   │   ├── documents.py     # Generated documents ★ NEW
+│   │   │   ├── approvals.py     # Approval workflow ★ NEW
+│   │   │   ├── chat.py          # Policy chatbot ★ NEW
+│   │   │   └── compliance.py    # Compliance tracking ★ NEW
 │   │   ├── services/
 │   │   │   ├── auth.py          # Auth service
-│   │   │   ├── orchestrator.py  # Workflow engine
+│   │   │   ├── orchestrator.py  # Workflow engine (10-step pipeline)
 │   │   │   ├── rag.py           # RAG engine
-│   │   │   ├── llm.py           # LLM integration
+│   │   │   ├── llm.py           # Multi-provider LLM (Groq→OpenAI→Anthropic→Mock)
 │   │   │   ├── embeddings.py    # Voyage AI embedding provider
-│   │   │   └── calendar.py      # Calendar service
-│   │   └── prompts/             # LLM prompt templates
-│   ├── data/                    # SQLite DB + ChromaDB
-│   ├── tests/                   # API tests
-│   │   └── test_page.html       # HTML page for manual API testing
+│   │   │   ├── employee.py      # Employee service
+│   │   │   ├── policy.py        # Policy service
+│   │   │   ├── calendar.py      # Calendar service
+│   │   │   ├── document_generator.py  # Jurisdiction-aware doc gen ★ NEW
+│   │   │   ├── approval.py      # Approval workflow service ★ NEW
+│   │   │   ├── chat.py          # RAG chatbot service ★ NEW
+│   │   │   └── compliance.py    # Compliance tracking service ★ NEW
+│   │   ├── prompts/
+│   │   │   ├── templates.py     # Core prompt templates
+│   │   │   └── documents/       # Document-specific prompts ★ NEW
+│   │   │       ├── employment_contract.py
+│   │   │       ├── nda.py
+│   │   │       ├── equity_agreement.py
+│   │   │       └── offer_letter.py
+│   │   └── seeds/               # Database seed data ★ NEW
+│   │       ├── jurisdictions.py # 3 jurisdictions × 3 templates
+│   │       └── compliance.py    # Sample compliance items
+│   ├── data/
+│   │   ├── onboarding.db        # SQLite database
+│   │   ├── chromadb/            # ChromaDB vector store
+│   │   ├── policies/            # Uploaded policy PDFs
+│   │   └── template_overrides.json
+│   ├── scripts/
+│   │   └── seed_data.py         # Manual seed script
+│   ├── tests/
+│   │   ├── test_page.html       # HTML page for manual API testing
+│   │   └── test_embeddings.py
 │   └── requirements.txt
 │
 ├── CLAUDE.md                    # This file
@@ -288,14 +329,15 @@ Frontend (NextAuth) → Backend (/api/auth/*) → Database
 
 ---
 
-## Key Features to Implement
+## Key Features
 
-### 1. Visual Workflow Graph (React Flow)
-- Nodes: Parse Data → Welcome Email → Offer Letter → 30-60-90 Plan → Schedule Events → Equipment Request
-- Real-time status updates (pending, running, completed, failed)
+### 1. Visual Workflow Graph (React Flow) ✅
+- **10-step pipeline**: Parse Data → Detect Jurisdiction → Employment Contract → NDA → Equity Agreement → Offer Letter → **[APPROVAL GATE]** → Welcome Email → 30-60-90 Plan → Schedule Events → Equipment Request
+- Real-time status updates (pending, running, completed, failed, awaiting_approval)
 - Animated transitions between states
+- Approval gate visualization on edges between document generation and post-approval steps
 
-### 2. RAG for Policies
+### 2. RAG for Policies ✅
 - Upload PDF policy documents
 - Chunk and embed with Voyage AI embeddings (primary) or OpenAI (fallback)
 - Store in ChromaDB
@@ -308,19 +350,133 @@ Frontend (NextAuth) → Backend (/api/auth/*) → Database
 - Get API key at https://www.voyageai.com/
 - Set `VOYAGE_API_KEY` in `.env` to activate
 
-### 3. Agent Thinking Panel
+### 3. Agent Thinking Panel ✅
 - Server-Sent Events (SSE) for streaming
 - Display AI reasoning in real-time
 - Auto-scroll as new content arrives
 
-### 4. File Upload
+### 4. File Upload ✅
 - CSV: Employee roster bulk import
 - PDF: Policy documents for RAG
 
-### 5. Google Calendar Integration
+### 5. Google Calendar Integration ✅
 - OAuth flow for calendar access
 - Auto-schedule: Orientation, Manager 1:1, Buddy meetup
 - Mock mode fallback for demos
+
+### 6. Jurisdiction Selector & Multi-Country Support ✅ NEW
+- Employee jurisdiction field (US, UK, AE, DE, SG)
+- Auto-detection step in pipeline based on employee data
+- Jurisdiction-specific document templates (employment contracts, NDAs, equity agreements)
+- `JurisdictionTemplate` model stores per-jurisdiction clause templates
+- Seeds: 3 jurisdictions (US, UK, AE) × 3 document types = 9 templates
+
+### 7. Expanded Document Generation ✅ NEW
+- 4 document types generated per onboarding: Employment Contract, NDA, Equity Agreement, Offer Letter
+- Jurisdiction-aware prompt templates in `prompts/documents/`
+- `GeneratedDocument` model tracks document status (draft, pending_review, approved, rejected, revision_requested)
+- Document download endpoint
+- `document_generator.py` service with dedicated functions per document type
+
+### 8. Human Approval Workflow ✅ NEW
+- Approval gate inserted after offer_letter step in the pipeline
+- Workflow transitions to `AWAITING_APPROVAL` status when gate is reached
+- `ApprovalRequest` model tracks individual document approvals
+- Approve/Reject/Request Revision actions with notes
+- Auto-resume: when all approvals are processed, workflow continues to welcome_email
+- SSE emits `approval_gate` event type for real-time frontend updates
+- Frontend approvals page with Pending/History tabs and review dialog
+
+### 9. Policy Chatbot ✅ NEW
+- RAG-powered Q&A over uploaded policy documents
+- Conversation history tracking (`ChatConversation`, `ChatMessage` models)
+- SSE streaming for real-time responses
+- Source document references displayed as badges
+- Suggestion buttons for common questions
+- Frontend chat page with conversation sidebar and message UI
+
+### 10. Compliance Tracking & Predictive Alerts ✅ NEW
+- `ComplianceItem` model tracks document expiry, training, certifications
+- Status tracking: valid, expiring_soon, expired, pending
+- Summary endpoint with overall compliance rate calculation
+- Predictive alerts based on expiry dates and risk levels
+- Frontend compliance page with stats, progress bar, All Items/Alerts/Predictions tabs
+
+---
+
+## Database Models (19 total)
+
+### Core Models
+- `User` — Authentication (email, hashed_password, google_id)
+- `Employee` — Employee data (name, email, role, department, start_date, **jurisdiction**)
+- `OnboardingWorkflow` — Workflow state machine (status includes **awaiting_approval**)
+- `OnboardingStep` — Individual step tracking (10 step types, **requires_approval**, **approval_status**)
+- `PolicyDocument` — Uploaded policy PDFs for RAG
+
+### New Models (Feature Extensions)
+- `JurisdictionTemplate` — Per-jurisdiction clause templates (jurisdiction_code, document_type, template_data)
+- `GeneratedDocument` — AI-generated documents with status tracking (content, document_type, status)
+- `ApprovalRequest` — Document approval requests (status, reviewer, notes)
+- `ChatConversation` — Chat session metadata (title, employee_id)
+- `ChatMessage` — Individual chat messages (role, content, sources)
+- `ComplianceItem` — Compliance tracking items (type, status, expiry_date, risk_level)
+
+### Enums
+- `StepType` — 10 values: parse_data, detect_jurisdiction, employment_contract, nda, equity_agreement, offer_letter, welcome_email, plan_30_60_90, schedule_events, equipment_request
+- `WorkflowStatus` — pending, running, completed, failed, paused, **awaiting_approval**
+- `DocumentStatus` — draft, pending_review, approved, rejected, revision_requested
+- `ApprovalStatus` — pending, approved, rejected, revision_requested
+- `ComplianceStatus` — valid, expiring_soon, expired, pending
+
+---
+
+## API Endpoints
+
+### Existing Routers
+- `POST /api/auth/register` — User registration
+- `POST /api/auth/login` — JWT login
+- `GET/POST /api/employees` — Employee CRUD
+- `POST /api/onboarding/{id}/start` — Start workflow (SSE streaming)
+- `GET/POST /api/policies` — Policy management + PDF upload
+
+### New Routers
+
+#### Jurisdictions (`/api/jurisdictions`)
+- `GET /` — List all jurisdictions
+- `GET /{code}` — Get jurisdiction info
+- `GET /{code}/templates` — Get templates for a jurisdiction
+
+#### Documents (`/api/documents`)
+- `GET /employee/{id}` — Get documents for an employee
+- `GET /{id}` — Get document details
+- `PUT /{id}` — Update document
+- `GET /{id}/download` — Download document content
+
+#### Approvals (`/api/approvals`)
+- `GET /` — List all approval requests
+- `GET /pending/count` — Get pending approval count
+- `GET /{id}` — Get approval details
+- `POST /{id}/approve` — Approve a document
+- `POST /{id}/reject` — Reject a document
+- `POST /{id}/revision` — Request revision
+- `GET /employee/{id}` — Get approvals for an employee
+
+#### Chat (`/api/chat`)
+- `POST /conversations` — Create new conversation
+- `GET /conversations` — List conversations
+- `GET /conversations/{id}` — Get conversation details
+- `GET /conversations/{id}/messages` — Get messages
+- `POST /conversations/{id}/messages` — Send message (returns answer)
+- `POST /conversations/{id}/stream` — Send message (SSE streaming)
+
+#### Compliance (`/api/compliance`)
+- `GET /` — List all compliance items
+- `GET /summary` — Get compliance summary with rate
+- `GET /alerts` — Get expiring/expired items
+- `GET /expired` — Get expired items only
+- `GET /predictions` — Get predictive alerts
+- `GET /employee/{id}` — Get compliance items for employee
+- `POST /` — Create compliance item
 
 ---
 
@@ -399,14 +555,28 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 
 ## Current Development Phase
 
-**Phase 1: Frontend Foundation**
-- [ ] Project setup with Next.js
-- [ ] shadcn/ui installation and configuration
-- [ ] Authentication pages (login, signup)
-- [ ] Basic layout and navigation
-- [ ] Google OAuth integration (frontend)
+**Phase 1: Foundation** ✅ COMPLETE
+- [x] Project setup with Next.js + FastAPI
+- [x] shadcn/ui installation and configuration
+- [x] Authentication pages (login, signup) + JWT
+- [x] Basic layout and navigation
+- [x] Employee management CRUD
+- [x] RAG pipeline (ChromaDB + Voyage AI)
+- [x] 6-step orchestrator pipeline with SSE streaming
+- [x] Workflow visualizer with React Flow
+- [x] Policy upload and management
 
-**Status:** Starting Phase 1
+**Phase 2: Feature Expansion** ✅ COMPLETE
+- [x] Jurisdiction selector & multi-country support (US, UK, AE)
+- [x] Expanded document generation (Employment Contract, NDA, Equity, Offer Letter)
+- [x] Human approval workflow with approval gate in pipeline
+- [x] Policy chatbot with RAG + conversation history
+- [x] Compliance tracking & predictive alerts
+- [x] Navigation updates (Approvals, Chat, Compliance pages)
+- [x] 10-step pipeline with approval gate between documents and post-approval steps
+- [x] Dashboard enhancements (compliance alerts, pending approvals)
+
+**Status:** Phase 2 Complete — All features implemented
 
 ---
 

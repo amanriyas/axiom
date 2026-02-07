@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -11,16 +11,31 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  CheckSquare,
+  MessageSquare,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
+import { approvalApi } from "@/lib/api";
 
-const navItems = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: number;
+}
+
+const staticNavItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/employees", label: "Employees", icon: Users },
   { href: "/onboarding", label: "Onboarding", icon: RefreshCw },
   { href: "/policies", label: "Policies", icon: FileText },
+  { href: "/approvals", label: "Approvals", icon: CheckSquare },
+  { href: "/chat", label: "Policy Chat", icon: MessageSquare },
+  { href: "/compliance", label: "Compliance", icon: ShieldCheck },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -28,6 +43,30 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchPendingCount = async () => {
+      try {
+        const { count } = await approvalApi.getPendingCount();
+        setPendingApprovals(count);
+      } catch {
+        // Non-critical — sidebar still works without badge
+      }
+    };
+    fetchPendingCount();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchPendingCount, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const navItems: NavItem[] = staticNavItems.map((item) => {
+    if (item.href === "/approvals" && pendingApprovals > 0) {
+      return { ...item, badge: pendingApprovals };
+    }
+    return item;
+  });
 
   const getInitials = (name: string) => {
     return name
@@ -83,7 +122,16 @@ export function Sidebar() {
               )}
             >
               <item.icon className="h-5 w-5 shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
+              {!collapsed && (
+                <span className="flex-1 flex items-center justify-between">
+                  {item.label}
+                  {item.badge && item.badge > 0 && (
+                    <Badge variant="destructive" className="ml-auto h-5 min-w-5 px-1 text-[10px]">
+                      {item.badge}
+                    </Badge>
+                  )}
+                </span>
+              )}
             </Link>
           );
         })}

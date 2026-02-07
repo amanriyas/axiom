@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { TopNav } from "@/components/layout/top-nav";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -65,6 +66,14 @@ import { employeeApi } from "@/lib/api";
 import { Employee, EmployeeCreate, EmployeeUpdate } from "@/types";
 
 const departments = ["Engineering", "Design", "Product", "Marketing", "Sales", "HR", "Finance", "Operations"];
+
+const jurisdictions = [
+  { code: "US", name: "United States" },
+  { code: "UK", name: "United Kingdom" },
+  { code: "AE", name: "UAE" },
+  { code: "DE", name: "Germany" },
+  { code: "SG", name: "Singapore" },
+];
 
 export default function EmployeesPage() {
   const router = useRouter();
@@ -197,6 +206,7 @@ export default function EmployeesPage() {
       start_date: employee.start_date,
       manager_email: employee.manager_email || "",
       buddy_email: employee.buddy_email || "",
+      jurisdiction: employee.jurisdiction || "US",
     });
     setEditDialogOpen(true);
   };
@@ -382,6 +392,7 @@ export default function EmployeesPage() {
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Department</TableHead>
+                    <TableHead>Jurisdiction</TableHead>
                     <TableHead>Start Date</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-12"></TableHead>
@@ -394,6 +405,11 @@ export default function EmployeesPage() {
                       <TableCell className="text-muted-foreground">{employee.email}</TableCell>
                       <TableCell>{employee.role}</TableCell>
                       <TableCell>{employee.department}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {employee.jurisdiction || "US"}
+                        </Badge>
+                      </TableCell>
                       <TableCell>{new Date(employee.start_date).toLocaleDateString()}</TableCell>
                       <TableCell>
                         <StatusBadge status={employee.status} />
@@ -504,6 +520,24 @@ export default function EmployeesPage() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="jurisdiction">Jurisdiction</Label>
+              <Select
+                value={formData.jurisdiction || "US"}
+                onValueChange={(value) => setFormData({ ...formData, jurisdiction: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select jurisdiction" />
+                </SelectTrigger>
+                <SelectContent>
+                  {jurisdictions.map((j) => (
+                    <SelectItem key={j.code} value={j.code}>
+                      {j.name} ({j.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="manager_email">Manager Email</Label>
               <Input
                 id="manager_email"
@@ -600,6 +634,24 @@ export default function EmployeesPage() {
                 value={editFormData.start_date || ""}
                 onChange={(e) => setEditFormData({ ...editFormData, start_date: e.target.value })}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-jurisdiction">Jurisdiction</Label>
+              <Select
+                value={editFormData.jurisdiction || "US"}
+                onValueChange={(value) => setEditFormData({ ...editFormData, jurisdiction: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select jurisdiction" />
+                </SelectTrigger>
+                <SelectContent>
+                  {jurisdictions.map((j) => (
+                    <SelectItem key={j.code} value={j.code}>
+                      {j.name} ({j.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-manager_email">Manager Email</Label>

@@ -11,6 +11,10 @@ import {
   Mail,
   Calendar,
   Monitor,
+  Globe,
+  FileSignature,
+  Shield,
+  DollarSign,
 } from "lucide-react";
 import type { StepType, StepStatus } from "@/types";
 
@@ -24,8 +28,12 @@ export type WorkflowNodeType = Node<WorkflowNodeData, "workflow">;
 
 const stepIcons: Record<StepType, React.ElementType> = {
   parse_data: FileText,
-  welcome_email: Mail,
+  detect_jurisdiction: Globe,
+  employment_contract: FileSignature,
+  nda: Shield,
+  equity_agreement: DollarSign,
   offer_letter: FileText,
+  welcome_email: Mail,
   plan_30_60_90: FileText,
   schedule_events: Calendar,
   equipment_request: Monitor,

@@ -12,10 +12,15 @@ import {
   Upload,
   Eye,
   ArrowRight,
+  ShieldAlert,
+  AlertTriangle,
+  XCircle,
+  CheckSquare,
 } from "lucide-react";
 import { TopNav } from "@/components/layout/top-nav";
 import { StatsCard } from "@/components/ui/stats-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -27,9 +32,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { employeeApi } from "@/lib/api";
+import { employeeApi, complianceApi, approvalApi } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
-import { Employee } from "@/types";
+import { Employee, ComplianceItem, ComplianceSummary } from "@/types";
 
 function formatTimeAgo(date: string): string {
   const now = new Date();
@@ -46,23 +51,31 @@ function formatTimeAgo(date: string): string {
 
 export default function DashboardPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [complianceAlerts, setComplianceAlerts] = useState<ComplianceItem[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const { user } = useAuth();
 
   useEffect(() => {
     if (!user) return; // Wait for auth to be confirmed
-    const fetchEmployees = async () => {
+    const fetchData = async () => {
       try {
-        const data = await employeeApi.list();
-        setEmployees(data);
+        const [empData, alertsData, approvalCount] = await Promise.all([
+          employeeApi.list(),
+          complianceApi.getAlerts().catch(() => []),
+          approvalApi.getPendingCount().catch(() => ({ count: 0 })),
+        ]);
+        setEmployees(empData);
+        setComplianceAlerts(alertsData);
+        setPendingApprovals(approvalCount.count);
       } catch (error) {
-        console.error("Failed to fetch employees:", error);
+        console.error("Failed to fetch dashboard data:", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchEmployees();
+    fetchData();
   }, [user]);
 
   // Calculate stats
@@ -222,6 +235,102 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Bottom Section: Compliance Alerts + Pending Approvals */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Compliance Alerts */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShieldAlert className="h-4 w-4 text-yellow-500" />
+                Compliance Alerts
+              </CardTitle>
+              <Link
+                href="/compliance"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                View All
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {complianceAlerts.length === 0 ? (
+                <div className="py-4 text-center text-sm text-muted-foreground">
+                  <CheckCircle className="mx-auto mb-2 h-6 w-6 text-green-500" />
+                  No compliance alerts
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {complianceAlerts.slice(0, 4).map((alert) => (
+                    <div
+                      key={alert.id}
+                      className="flex items-center justify-between rounded-lg border p-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        {alert.status === "expired" ? (
+                          <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+                        ) : (
+                          <AlertTriangle className="h-4 w-4 text-yellow-500 shrink-0" />
+                        )}
+                        <div>
+                          <p className="text-sm font-medium">{alert.description}</p>
+                          <p className="text-xs text-muted-foreground">{alert.employee_name}</p>
+                        </div>
+                      </div>
+                      <Badge
+                        variant={alert.status === "expired" ? "destructive" : "outline"}
+                        className={
+                          alert.status === "expiring_soon"
+                            ? "border-yellow-500/50 text-yellow-500"
+                            : ""
+                        }
+                      >
+                        {alert.status === "expired" ? "Expired" : "Expiring"}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Pending Approvals */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CheckSquare className="h-4 w-4 text-primary" />
+                Pending Approvals
+              </CardTitle>
+              <Link
+                href="/approvals"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                View All
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {pendingApprovals === 0 ? (
+                <div className="py-4 text-center text-sm text-muted-foreground">
+                  <CheckCircle className="mx-auto mb-2 h-6 w-6 text-green-500" />
+                  No pending approvals
+                </div>
+              ) : (
+                <div className="flex flex-col items-center py-4">
+                  <div className="text-4xl font-bold text-primary">{pendingApprovals}</div>
+                  <p className="text-sm text-muted-foreground mt-1">documents awaiting review</p>
+                  <Button
+                    className="mt-4"
+                    size="sm"
+                    onClick={() => router.push("/approvals")}
+                  >
+                    Review Now
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
