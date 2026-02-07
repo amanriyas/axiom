@@ -19,6 +19,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Verify secrets exist
+        run: |
+          if [ -z "${{ secrets.AWS_HOST }}" ]; then
+            echo "❌ AWS_HOST secret is empty or not set!"
+            exit 1
+          fi
+          if [ -z "${{ secrets.AWS_USER }}" ]; then
+            echo "❌ AWS_USER secret is empty or not set!"
+            exit 1
+          fi
+          if [ -z "${{ secrets.AWS_SSH_KEY }}" ]; then
+            echo "❌ AWS_SSH_KEY secret is empty or not set!"
+            exit 1
+          fi
+          echo "✅ All secrets are set"
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
