@@ -1,34 +1,60 @@
+# ===========================
+# Axiom Backend — .dockerignore
+# ===========================
+# Keep the Docker image as small as possible.
+
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
 *.so
 *.egg-info/
+*.egg
+dist/
+build/
 venv/
 .venv/
 env/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
 
-# Data — mounted as volume, not baked into image
+# Data — mounted as a volume at runtime, NOT baked into the image
 data/
 
-# Environment files (secrets — created on VM, not in image)
+# Environment files (secrets live on the VM, not in the image)
 .env
-.env.local
-.env.production
+.env.*
+!.env.example
 
 # IDE / OS
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+Desktop.ini
 
 # Git
 .git/
 .gitignore
+.gitattributes
 
-# Railway config (not needed for AWS)
+# Railway config (not needed for AWS/Docker)
 railway.toml
 Procfile
 runtime.txt
 
-# Tests (optional — exclude to keep image smaller)
-# tests/
+# Docker config (no need to copy into itself)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation
+*.md
+LICENSE
+
+# Tests (not needed in production image)
+tests/

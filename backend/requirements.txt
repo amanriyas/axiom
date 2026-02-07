@@ -9,8 +9,6 @@ python-multipart==0.0.9
 
 # Database
 sqlalchemy==2.0.25
-aiosqlite==0.19.0
-psycopg2-binary==2.9.9
 
 # Authentication
 python-jose[cryptography]==3.3.0
@@ -24,14 +22,9 @@ anthropic>=0.18.1
 chromadb>=0.4.22
 voyageai>=0.2.1
 langchain-voyageai>=0.1.0
-langchain>=0.1.6
-langchain-openai>=0.0.5
-langchain-community>=0.0.21
 
 # Document Processing
-pandas==2.2.0
 pymupdf==1.23.22
-python-docx==1.1.0
 
 # Google APIs
 google-api-python-client==2.118.0
@@ -42,9 +35,4 @@ python-dotenv==1.0.1
 pydantic==2.6.1
 pydantic-settings==2.1.0
 email-validator>=2.0.0
-httpx==0.26.0
 bcrypt==4.0.1
-
-# Development
-pytest==7.4.4
-pytest-asyncio==0.23.4
