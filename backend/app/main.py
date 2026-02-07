@@ -13,6 +13,7 @@ from app.database import create_tables
 
 # ── Import all routers ──────────────────────────────────────
 from app.routers import auth, employees, policies, onboarding, calendar
+from app.routers import jurisdictions, documents, approvals, chat, compliance
 
 
 # ── Lifespan (startup / shutdown) ───────────────────────────
@@ -26,6 +27,24 @@ async def lifespan(app: FastAPI):
     # Create database tables
     create_tables()
     print("✅ Database tables created")
+
+    # Seed jurisdiction templates
+    from app.database import SessionLocal
+    from app.seeds.jurisdictions import seed_jurisdictions
+    from app.seeds.compliance import seed_compliance
+
+    seed_db = SessionLocal()
+    try:
+        jcount = seed_jurisdictions(seed_db)
+        if jcount > 0:
+            print(f"✅ Seeded {jcount} jurisdiction templates")
+        ccount = seed_compliance(seed_db)
+        if ccount > 0:
+            print(f"✅ Seeded {ccount} compliance items")
+    except Exception as e:
+        print(f"⚠️  Seed error (non-fatal): {e}")
+    finally:
+        seed_db.close()
 
     # Show AI provider status
     from app.services.llm import _get_provider
@@ -72,6 +91,11 @@ app.include_router(employees.router)
 app.include_router(policies.router)
 app.include_router(onboarding.router)
 app.include_router(calendar.router)
+app.include_router(jurisdictions.router)
+app.include_router(documents.router)
+app.include_router(approvals.router)
+app.include_router(chat.router)
+app.include_router(compliance.router)
 
 
 # ── Root endpoint ───────────────────────────────────────────

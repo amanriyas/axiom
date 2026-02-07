@@ -29,6 +29,10 @@ from app.models import (
     Policy,
     OnboardingWorkflow, WorkflowStatus,
     OnboardingStep, StepType, StepStatus,
+    GeneratedDocument, DocumentStatus,
+    ApprovalRequest, ApprovalStatus,
+    ChatConversation, ChatMessage,
+    ComplianceItem, ComplianceStatus,
 )
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -45,6 +49,7 @@ EMPLOYEES = [
         start_date=date(2026, 2, 17),
         manager_email="alex.chen@axiom.io",
         buddy_email="marcus.johnson@axiom.io",
+        jurisdiction="US",
         status=EmployeeStatus.PENDING,
     ),
     dict(
@@ -55,6 +60,7 @@ EMPLOYEES = [
         start_date=date(2026, 2, 24),
         manager_email="sarah.kim@axiom.io",
         buddy_email="nina.patel@axiom.io",
+        jurisdiction="UK",
         status=EmployeeStatus.PENDING,
     ),
     dict(
@@ -65,6 +71,7 @@ EMPLOYEES = [
         start_date=date(2026, 3, 2),
         manager_email="david.lee@axiom.io",
         buddy_email="carlos.rivera@axiom.io",
+        jurisdiction="AE",
         status=EmployeeStatus.PENDING,
     ),
     dict(
@@ -75,6 +82,7 @@ EMPLOYEES = [
         start_date=date(2026, 3, 2),
         manager_email="alex.chen@axiom.io",
         buddy_email="wei.zhang@axiom.io",
+        jurisdiction="DE",
         status=EmployeeStatus.PENDING,
     ),
     dict(
@@ -85,6 +93,7 @@ EMPLOYEES = [
         start_date=date(2026, 2, 17),
         manager_email="rachel.green@axiom.io",
         buddy_email="tom.harris@axiom.io",
+        jurisdiction="US",
         status=EmployeeStatus.PENDING,
     ),
     dict(
@@ -95,6 +104,7 @@ EMPLOYEES = [
         start_date=date(2026, 3, 9),
         manager_email="rachel.green@axiom.io",
         buddy_email="sophie.williams@axiom.io",
+        jurisdiction="SG",
         status=EmployeeStatus.PENDING,
     ),
     dict(
@@ -105,6 +115,7 @@ EMPLOYEES = [
         start_date=date(2026, 3, 16),
         manager_email="rachel.green@axiom.io",
         buddy_email=None,
+        jurisdiction="UK",
         status=EmployeeStatus.PENDING,
     ),
 
@@ -117,6 +128,7 @@ EMPLOYEES = [
         start_date=date(2026, 1, 6),
         manager_email="alex.chen@axiom.io",
         buddy_email="wei.zhang@axiom.io",
+        jurisdiction="US",
         status=EmployeeStatus.COMPLETED,
     ),
     dict(
@@ -127,6 +139,7 @@ EMPLOYEES = [
         start_date=date(2026, 1, 13),
         manager_email="sarah.kim@axiom.io",
         buddy_email="james.obrien@axiom.io",
+        jurisdiction="UK",
         status=EmployeeStatus.COMPLETED,
     ),
     dict(
@@ -137,6 +150,7 @@ EMPLOYEES = [
         start_date=date(2026, 1, 20),
         manager_email="david.lee@axiom.io",
         buddy_email="amara.okafor@axiom.io",
+        jurisdiction="AE",
         status=EmployeeStatus.COMPLETED,
     ),
 
@@ -149,6 +163,7 @@ EMPLOYEES = [
         start_date=date(2026, 2, 3),
         manager_email="alex.chen@axiom.io",
         buddy_email="marcus.johnson@axiom.io",
+        jurisdiction="US",
         status=EmployeeStatus.ONBOARDING,
     ),
 
@@ -161,6 +176,7 @@ EMPLOYEES = [
         start_date=date(2026, 1, 27),
         manager_email="alex.chen@axiom.io",
         buddy_email="marcus.johnson@axiom.io",
+        jurisdiction="US",
         status=EmployeeStatus.FAILED,
     ),
 ]
@@ -373,8 +389,14 @@ All employees handling customer data must complete privacy training annually."""
 # 3. COMPLETED WORKFLOW STEP RESULTS (realistic AI-generated content)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def _step_results(emp_name, emp_role, emp_dept, emp_start, mgr, buddy):
+def _step_results(emp_name, emp_role, emp_dept, emp_start, mgr, buddy, jurisdiction="US"):
     """Return a dict of step_type -> realistic result text for a completed workflow."""
+    jurisdiction_labels = {
+        "US": "United States", "UK": "United Kingdom", "AE": "United Arab Emirates",
+        "DE": "Germany", "SG": "Singapore",
+    }
+    jur_label = jurisdiction_labels.get(jurisdiction, jurisdiction)
+
     return {
         StepType.PARSE_DATA: f"""# Employee Data Validation — {emp_name}
 
@@ -388,8 +410,122 @@ def _step_results(emp_name, emp_role, emp_dept, emp_start, mgr, buddy):
 | Start Date | {emp_start} | Valid (weekday) |
 | Manager | {mgr} | Found in directory |
 | Buddy | {buddy} | Found in directory |
+| Jurisdiction | {jurisdiction} | {jur_label} |
 
 **Assessment:** All critical fields present and validated. Ready to proceed with onboarding.""",
+
+        StepType.DETECT_JURISDICTION: f"""# Jurisdiction Detection — {emp_name}
+
+**Detected Jurisdiction:** {jurisdiction} ({jur_label})
+
+**Detection Method:** Employee profile field
+**Confidence:** 100% (explicitly set)
+
+**Applicable Legal Frameworks:**
+- Employment law: {jur_label} labor regulations
+- Tax withholding: {jurisdiction} tax authority rules
+- Benefits: {jurisdiction}-compliant benefits package
+- Data protection: {"GDPR" if jurisdiction in ("UK", "DE") else "Local regulations"}
+
+**Document Templates:** Loading {jurisdiction}-specific templates for employment contract, NDA, and equity agreement.
+
+**Status:** Jurisdiction confirmed. Proceeding with {jurisdiction}-specific document generation.""",
+
+        StepType.EMPLOYMENT_CONTRACT: f"""# Employment Contract — {emp_name}
+
+**Jurisdiction:** {jurisdiction} ({jur_label})
+**Document Status:** Generated successfully
+
+---
+
+EMPLOYMENT AGREEMENT ({jur_label.upper()})
+
+This Employment Agreement is entered into as of {emp_start}, by and between Axiom Inc. and {emp_name}.
+
+**1. POSITION:** {emp_role}, {emp_dept} department. Reports to {mgr.split('@')[0].replace('.', ' ').title()}.
+
+**2. EMPLOYMENT TYPE:** Full-time, {"at-will" if jurisdiction == "US" else "permanent contract"}.
+
+**3. COMPENSATION:** As detailed in the attached compensation schedule.
+
+**4. BENEFITS:** Employee is entitled to all benefits per {jurisdiction} employment law.
+
+**5. TERMINATION:** {"Either party may terminate at any time (at-will)." if jurisdiction == "US" else f"Subject to {jur_label} labor law notice periods."}
+
+**6. GOVERNING LAW:** This agreement is governed by the laws of {jur_label}.
+
+Signed: ________________________     Date: ________""",
+
+        StepType.NDA: f"""# Non-Disclosure Agreement — {emp_name}
+
+**Jurisdiction:** {jurisdiction} ({jur_label})
+**Document Status:** Generated successfully
+
+---
+
+NON-DISCLOSURE AGREEMENT
+
+Between Axiom Inc. ("Company") and {emp_name} ("Employee"), effective {emp_start}.
+
+**1. CONFIDENTIAL INFORMATION:** All non-public business information, source code, customer data, and trade secrets.
+
+**2. OBLIGATIONS:** Employee shall maintain strict confidentiality, use information only for employment purposes, and return all materials upon separation.
+
+**3. DURATION:** {"2 years post-employment" if jurisdiction == "US" else "Indefinite for trade secrets, 1 year for other confidential information"}.
+
+**4. REMEDIES:** Company is entitled to injunctive relief and damages for breach.
+
+**5. GOVERNING LAW:** {jur_label} | {"Arbitration in employee's home state" if jurisdiction == "US" else f"Jurisdiction of {jur_label} courts"}.""",
+
+        StepType.EQUITY_AGREEMENT: f"""# Equity Agreement — {emp_name}
+
+**Jurisdiction:** {jurisdiction} ({jur_label})
+**Document Status:** Generated successfully
+
+---
+
+STOCK OPTION GRANT AGREEMENT
+
+Axiom Inc. grants to {emp_name} stock options under the Company's Equity Incentive Plan.
+
+**Grant Details:**
+- Vesting Schedule: 4-year vest, 1-year cliff
+- Exercise Period: 10 years from grant date
+- Option Type: {"ISO (Incentive Stock Options)" if jurisdiction == "US" else "Non-qualified options"}
+
+**Tax Treatment:**
+{"- Subject to IRC Section 422 (ISO rules)" if jurisdiction == "US" else f"- Subject to {jur_label} tax regulations on equity compensation"}
+{"- AMT considerations apply at exercise" if jurisdiction == "US" else ""}
+
+**Termination:** Unvested options forfeit upon separation. Vested options exercisable for 90 days post-separation.""",
+
+        StepType.OFFER_LETTER: f"""# OFFER OF EMPLOYMENT — CONFIDENTIAL
+
+Date: {(datetime.strptime(str(emp_start), '%Y-%m-%d') - timedelta(days=14)).strftime('%B %d, %Y')}
+
+Dear {emp_name},
+
+We are pleased to extend an offer of employment for the position of **{emp_role}** in the **{emp_dept}** department at Axiom Inc.
+
+**Position Details:**
+- Title: {emp_role}
+- Department: {emp_dept}
+- Start Date: {emp_start}
+- Reports To: {mgr.split('@')[0].replace('.', ' ').title()}
+- Location: {"Hybrid (3 days in-office)" if jurisdiction == "US" else f"{jur_label} office — hybrid"}
+- Employment Type: Full-time, {"Exempt" if jurisdiction == "US" else "Permanent"}
+- Jurisdiction: {jurisdiction} ({jur_label})
+
+**Benefits (effective Day 1):**
+- Medical, Dental, Vision insurance
+- {"401(k) with 4% match" if jurisdiction == "US" else "Pension scheme per local requirements"}
+- {"Unlimited PTO (minimum 15 days encouraged)" if jurisdiction == "US" else f"Annual leave per {jur_label} statutory minimum + 5 additional days"}
+- $3,000/year learning and development budget
+
+This offer is contingent upon successful background verification.
+
+Sincerely,
+Rachel Green, VP of People Operations""",
 
         StepType.WELCOME_EMAIL: f"""**Subject: Welcome to Axiom, {emp_name.split()[0]}!**
 
@@ -412,33 +548,6 @@ We can not wait to have you on the team.
 
 Best regards,
 The Axiom People Team""",
-
-        StepType.OFFER_LETTER: f"""# OFFER OF EMPLOYMENT — CONFIDENTIAL
-
-Date: {(datetime.strptime(str(emp_start), '%Y-%m-%d') - timedelta(days=14)).strftime('%B %d, %Y')}
-
-Dear {emp_name},
-
-We are pleased to extend an offer of employment for the position of **{emp_role}** in the **{emp_dept}** department at Axiom Inc.
-
-**Position Details:**
-- Title: {emp_role}
-- Department: {emp_dept}
-- Start Date: {emp_start}
-- Reports To: {mgr.split('@')[0].replace('.', ' ').title()}
-- Location: Hybrid (3 days in-office)
-- Employment Type: Full-time, Exempt
-
-**Benefits (effective Day 1):**
-- Medical, Dental, Vision insurance
-- 401(k) with 4% match
-- Unlimited PTO (minimum 15 days encouraged)
-- $3,000/year learning and development budget
-
-This offer is contingent upon successful background verification.
-
-Sincerely,
-Rachel Green, VP of People Operations""",
 
         StepType.PLAN_30_60_90: f"""# 30-60-90 Day Plan — {emp_name}, {emp_role}
 
@@ -596,6 +705,7 @@ def seed_employees(db):
             start_date=emp["start_date"],
             manager_email=emp.get("manager_email"),
             buddy_email=emp.get("buddy_email"),
+            jurisdiction=emp.get("jurisdiction", "US"),
             status=emp["status"],
             created_at=created_at,
             updated_at=updated_at,
@@ -665,8 +775,12 @@ def seed_workflows(db):
     """Create completed/failed workflows with step results."""
     STEP_ORDER = [
         StepType.PARSE_DATA,
-        StepType.WELCOME_EMAIL,
+        StepType.DETECT_JURISDICTION,
+        StepType.EMPLOYMENT_CONTRACT,
+        StepType.NDA,
+        StepType.EQUITY_AGREEMENT,
         StepType.OFFER_LETTER,
+        StepType.WELCOME_EMAIL,
         StepType.PLAN_30_60_90,
         StepType.SCHEDULE_EVENTS,
         StepType.EQUIPMENT_REQUEST,
@@ -705,7 +819,11 @@ def seed_workflows(db):
             str(employee.start_date),
             employee.manager_email or "manager@axiom.io",
             employee.buddy_email or "",
+            jurisdiction=employee.jurisdiction or "US",
         )
+
+        # Steps that require approval (document generation steps)
+        approval_steps = {StepType.EMPLOYMENT_CONTRACT, StepType.NDA, StepType.EQUITY_AGREEMENT, StepType.OFFER_LETTER}
 
         for i, step_type in enumerate(STEP_ORDER):
             step_started = started_at + timedelta(minutes=i * 2)
@@ -716,6 +834,8 @@ def seed_workflows(db):
                 step_order=i + 1,
                 status=StepStatus.COMPLETED,
                 result=results.get(step_type, "Completed successfully."),
+                requires_approval=step_type in approval_steps,
+                approval_status="approved" if step_type in approval_steps else None,
                 started_at=step_started,
                 completed_at=step_completed,
             )
@@ -723,7 +843,7 @@ def seed_workflows(db):
 
         db.commit()
         created += 1
-        print(f"  ✅ 🟢 Completed workflow: {employee.name} (6/6 steps)")
+        print(f"  ✅ 🟢 Completed workflow: {employee.name} (10/10 steps)")
 
     # ── Failed workflows ─────────────────────────────────────────
     failed_emps = db.query(Employee).filter(
@@ -756,8 +876,10 @@ def seed_workflows(db):
             str(employee.start_date),
             employee.manager_email or "manager@axiom.io",
             employee.buddy_email or "",
+            jurisdiction=employee.jurisdiction or "US",
         )
 
+        # Failed at step 4 (employment_contract — index 2 in new 10-step pipeline)
         for i, step_type in enumerate(STEP_ORDER):
             if i < 2:
                 status = StepStatus.COMPLETED
@@ -792,7 +914,7 @@ def seed_workflows(db):
 
         db.commit()
         created += 1
-        print(f"  ✅ 🔴 Failed workflow: {employee.name} (failed at step 3)")
+        print(f"  ✅ 🔴 Failed workflow: {employee.name} (failed at step 3: employment_contract)")
 
     # ── In-progress workflow (partial) ───────────────────────────
     onboarding_emps = db.query(Employee).filter(
@@ -823,17 +945,19 @@ def seed_workflows(db):
             str(employee.start_date),
             employee.manager_email or "manager@axiom.io",
             employee.buddy_email or "",
+            jurisdiction=employee.jurisdiction or "US",
         )
 
+        # First 4 steps completed, 5th running (equity_agreement)
         for i, step_type in enumerate(STEP_ORDER):
-            if i < 3:
-                # First 3 steps completed
+            if i < 4:
+                # First 4 steps completed (parse_data, detect_jurisdiction, employment_contract, nda)
                 status = StepStatus.COMPLETED
                 result = results.get(step_type, "Done.")
                 s_started = started_at + timedelta(minutes=i * 2)
                 s_completed = s_started + timedelta(minutes=1, seconds=30)
-            elif i == 3:
-                # 4th step is running
+            elif i == 4:
+                # 5th step is running (equity_agreement)
                 status = StepStatus.RUNNING
                 result = None
                 s_started = started_at + timedelta(minutes=i * 2)
@@ -858,9 +982,234 @@ def seed_workflows(db):
 
         db.commit()
         created += 1
-        print(f"  ✅ 🔵 In-progress workflow: {employee.name} (3/6 steps done, step 4 running)")
+        print(f"  ✅ 🔵 In-progress workflow: {employee.name} (4/10 steps done, step 5 running)")
 
     return created
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# SEED: Generated Documents + Approval Requests
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def seed_documents_and_approvals(db):
+    """Create generated documents and approval requests for completed employees
+    so the Approvals page has data to show immediately."""
+    if db.query(GeneratedDocument).first():
+        print("  ⏭️  Skip (documents already exist)")
+        return 0
+
+    completed_emps = db.query(Employee).filter(
+        Employee.status == EmployeeStatus.COMPLETED
+    ).all()
+
+    if not completed_emps:
+        print("  ⏭️  No completed employees found")
+        return 0
+
+    doc_types = ["employment_contract", "nda", "equity_agreement", "offer_letter"]
+    now = datetime.utcnow()
+    doc_count = 0
+    approval_count = 0
+
+    for emp in completed_emps:
+        jurisdiction = emp.jurisdiction or "US"
+
+        for dtype in doc_types:
+            doc = GeneratedDocument(
+                employee_id=emp.id,
+                document_type=dtype,
+                jurisdiction=jurisdiction,
+                content=f"# {dtype.replace('_', ' ').title()} — {emp.name}\n\n"
+                         f"**Jurisdiction:** {jurisdiction}\n"
+                         f"**Employee:** {emp.name}\n"
+                         f"**Role:** {emp.role}\n"
+                         f"**Department:** {emp.department}\n"
+                         f"**Start Date:** {emp.start_date}\n\n"
+                         f"This is a generated {dtype.replace('_', ' ')} document.\n"
+                         f"Full content would be generated by the AI pipeline.",
+                status=DocumentStatus.APPROVED,
+                version=1,
+                generated_at=now - timedelta(days=30),
+                approved_at=now - timedelta(days=28),
+            )
+            db.add(doc)
+            db.flush()  # get doc.id
+
+            # Create approval request — approved for completed employees
+            approval = ApprovalRequest(
+                employee_id=emp.id,
+                document_id=doc.id,
+                status=ApprovalStatus.APPROVED,
+                comments=f"Reviewed and approved — {dtype.replace('_', ' ')} for {emp.name}",
+                created_at=now - timedelta(days=30),
+                reviewed_at=now - timedelta(days=28),
+            )
+            db.add(approval)
+            doc_count += 1
+            approval_count += 1
+
+        print(f"  ✅ {emp.name} — 4 documents + 4 approvals (approved)")
+
+    # Add some pending approvals for the in-progress / pending employees to give the UI something to review
+    pending_emps = db.query(Employee).filter(
+        Employee.status.in_([EmployeeStatus.PENDING, EmployeeStatus.ONBOARDING])
+    ).limit(3).all()
+
+    for emp in pending_emps:
+        jurisdiction = emp.jurisdiction or "US"
+        # Create 2-3 pending documents for each
+        for dtype in doc_types[:3]:  # employment_contract, nda, equity_agreement
+            doc = GeneratedDocument(
+                employee_id=emp.id,
+                document_type=dtype,
+                jurisdiction=jurisdiction,
+                content=f"# {dtype.replace('_', ' ').title()} — {emp.name}\n\n"
+                         f"**Jurisdiction:** {jurisdiction}\n"
+                         f"**Employee:** {emp.name}\n"
+                         f"**Role:** {emp.role}\n"
+                         f"**Department:** {emp.department}\n"
+                         f"**Start Date:** {emp.start_date}\n\n"
+                         f"---\n\n"
+                         f"## DRAFT — Pending Review\n\n"
+                         f"This {dtype.replace('_', ' ')} document has been generated by the AI pipeline "
+                         f"and is awaiting human review and approval before the onboarding workflow can continue.\n\n"
+                         f"### Key Clauses\n"
+                         f"- Employment terms per {jurisdiction} regulations\n"
+                         f"- Compensation and benefits package\n"
+                         f"- Termination provisions\n"
+                         f"- Confidentiality obligations\n",
+                status=DocumentStatus.PENDING_APPROVAL,
+                version=1,
+                generated_at=now - timedelta(hours=6),
+            )
+            db.add(doc)
+            db.flush()
+
+            approval = ApprovalRequest(
+                employee_id=emp.id,
+                document_id=doc.id,
+                status=ApprovalStatus.PENDING,
+                created_at=now - timedelta(hours=6),
+            )
+            db.add(approval)
+            doc_count += 1
+            approval_count += 1
+
+        print(f"  ✅ {emp.name} — 3 documents + 3 approvals (pending review)")
+
+    db.commit()
+    print(f"\n  📊 Total: {doc_count} documents, {approval_count} approvals")
+    return doc_count
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# SEED: Chat Conversations
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def seed_chat_conversations(db):
+    """Create sample chat conversations to populate the Chat page."""
+    if db.query(ChatConversation).first():
+        print("  ⏭️  Skip (conversations already exist)")
+        return 0
+
+    now = datetime.utcnow()
+    convos = [
+        {
+            "title": "PTO Policy Questions",
+            "started_at": now - timedelta(days=3),
+            "messages": [
+                ("user", "What is the PTO policy at Axiom?", None),
+                ("assistant",
+                 "Axiom offers **unlimited PTO** with a minimum of 15 days encouraged per year. "
+                 "In addition, there are:\n\n"
+                 "- **12 company holidays** per year\n"
+                 "- **2 floating holidays** (use anytime)\n"
+                 "- **Unlimited sick leave** (honor system)\n"
+                 "- **16 weeks parental leave** (fully paid for both birth and non-birth parents)\n\n"
+                 "The company encourages employees to take regular time off to maintain work-life balance.",
+                 '["Benefits & Compensation Overview"]'),
+                ("user", "Is there a minimum number of days I need to take?", None),
+                ("assistant",
+                 "While PTO is unlimited, Axiom **strongly encourages a minimum of 15 days per year**. "
+                 "This is not a cap — it is the recommended floor. The company believes regular time off "
+                 "improves productivity and well-being. Managers will check in if they notice team members "
+                 "aren't taking enough time off.",
+                 '["Benefits & Compensation Overview"]'),
+            ],
+        },
+        {
+            "title": "Remote Work Setup",
+            "started_at": now - timedelta(days=1),
+            "messages": [
+                ("user", "What equipment do remote employees get?", None),
+                ("assistant",
+                 "Remote and hybrid employees receive the **same equipment as in-office employees**:\n\n"
+                 "- Company laptop (MacBook Pro or ThinkPad based on role)\n"
+                 "- External monitor\n"
+                 "- Ergonomic keyboard/mouse\n"
+                 "- Noise-canceling headset\n\n"
+                 "Additionally, remote employees get:\n"
+                 "- A one-time **$1,500 home office setup stipend**\n"
+                 "- A **$100/month** internet and utilities allowance\n\n"
+                 "IT will ship all equipment to your registered home address.",
+                 '["Remote Work & Hybrid Policy", "Employee Onboarding Guide"]'),
+                ("user", "What are the core hours I need to be available?", None),
+                ("assistant",
+                 "All employees must be available during **core hours: 10:00 AM to 3:00 PM** "
+                 "in their local timezone. This is for meetings and real-time collaboration.\n\n"
+                 "Outside core hours, you have flexibility in how you structure your workday. "
+                 "The key communication expectations are:\n"
+                 "- Respond to Slack messages within 2 hours during core hours\n"
+                 "- Camera on for team meetings and client calls\n"
+                 "- Update Slack status when stepping away for 30+ minutes\n"
+                 "- Weekly async status updates every Friday",
+                 '["Remote Work & Hybrid Policy"]'),
+            ],
+        },
+        {
+            "title": "Security Training Requirements",
+            "started_at": now - timedelta(hours=5),
+            "messages": [
+                ("user", "When is security training due?", None),
+                ("assistant",
+                 "Annual security awareness training is **mandatory and due by March 31 each year**. "
+                 "All employees, contractors, and third parties who access Axiom systems must complete it.\n\n"
+                 "The training covers:\n"
+                 "- Data classification and handling\n"
+                 "- MFA and access control best practices\n"
+                 "- Incident response procedures\n"
+                 "- Acceptable use policies\n\n"
+                 "Axiom complies with **SOC 2 Type II, GDPR, and CCPA** requirements.",
+                 '["Information Security Policy"]'),
+            ],
+        },
+    ]
+
+    count = 0
+    for conv_data in convos:
+        conv = ChatConversation(
+            title=conv_data["title"],
+            started_at=conv_data["started_at"],
+            last_message_at=conv_data["started_at"] + timedelta(minutes=len(conv_data["messages"]) * 2),
+        )
+        db.add(conv)
+        db.flush()
+
+        for idx, (role, content, sources) in enumerate(conv_data["messages"]):
+            msg = ChatMessage(
+                conversation_id=conv.id,
+                role=role,
+                content=content,
+                sources=sources,
+                created_at=conv_data["started_at"] + timedelta(minutes=idx * 2),
+            )
+            db.add(msg)
+
+        count += 1
+        print(f"  ✅ \"{conv_data['title']}\" — {len(conv_data['messages'])} messages")
+
+    db.commit()
+    return count
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -887,22 +1236,38 @@ def main():
         print("\n🔄 Seeding Onboarding Workflows...")
         wf_count = seed_workflows(db)
 
+        print("\n📝 Seeding Generated Documents & Approvals...")
+        doc_count = seed_documents_and_approvals(db)
+
+        print("\n💬 Seeding Chat Conversations...")
+        chat_count = seed_chat_conversations(db)
+
         # ── Summary ──────────────────────────────────────────────
         print()
         print("=" * 62)
         print("  ✅ SEED COMPLETE")
         print("=" * 62)
-        print(f"  New employees:  {emp_count}")
-        print(f"  New policies:   {pol_count}")
-        print(f"  New workflows:  {wf_count}")
+        print(f"  New employees:      {emp_count}")
+        print(f"  New policies:       {pol_count}")
+        print(f"  New workflows:      {wf_count}")
+        print(f"  New documents:      {doc_count}")
+        print(f"  New conversations:  {chat_count}")
 
         total_emp = db.query(Employee).count()
         total_pol = db.query(Policy).count()
         total_wf = db.query(OnboardingWorkflow).count()
+        total_docs = db.query(GeneratedDocument).count()
+        total_approvals = db.query(ApprovalRequest).count()
+        total_compliance = db.query(ComplianceItem).count()
+        total_chats = db.query(ChatConversation).count()
         pending = db.query(Employee).filter(Employee.status == EmployeeStatus.PENDING).count()
+        pending_approvals = db.query(ApprovalRequest).filter(ApprovalRequest.status == ApprovalStatus.PENDING).count()
 
         print()
-        print(f"  📊 DB totals: {total_emp} employees, {total_pol} policies, {total_wf} workflows")
+        print(f"  📊 DB totals:")
+        print(f"     {total_emp} employees, {total_pol} policies, {total_wf} workflows")
+        print(f"     {total_docs} documents, {total_approvals} approvals ({pending_approvals} pending)")
+        print(f"     {total_compliance} compliance items, {total_chats} chat conversations")
         print(f"  🎯 {pending} employees are PENDING — ready to run onboarding!")
         print("=" * 62)
         print()

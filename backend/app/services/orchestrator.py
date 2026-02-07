@@ -1,5 +1,5 @@
 # app/services/orchestrator.py
-"""Workflow orchestration engine — manages the 6-step onboarding pipeline."""
+"""Workflow orchestration engine — manages the expanded onboarding pipeline."""
 
 import json
 import asyncio
@@ -19,6 +19,13 @@ from app.models import (
 )
 from app.services import llm, rag
 from app.services.calendar import schedule_onboarding_events
+from app.services.document_generator import (
+    generate_employment_contract,
+    generate_nda,
+    generate_equity_agreement,
+    generate_offer_letter_doc,
+)
+from app.services.approval import create_approval_request
 from app.prompts import get_template
 from app.prompts.templates import PARSE_DATA_PROMPT
 
@@ -29,12 +36,24 @@ from app.prompts.templates import PARSE_DATA_PROMPT
 
 STEP_ORDER = [
     StepType.PARSE_DATA,
-    StepType.WELCOME_EMAIL,
+    StepType.DETECT_JURISDICTION,
+    StepType.EMPLOYMENT_CONTRACT,
+    StepType.NDA,
+    StepType.EQUITY_AGREEMENT,
     StepType.OFFER_LETTER,
+    StepType.WELCOME_EMAIL,
     StepType.PLAN_30_60_90,
     StepType.SCHEDULE_EVENTS,
     StepType.EQUIPMENT_REQUEST,
 ]
+
+# Steps that generate legal documents requiring human approval
+APPROVAL_STEPS = {
+    StepType.EMPLOYMENT_CONTRACT,
+    StepType.NDA,
+    StepType.EQUITY_AGREEMENT,
+    StepType.OFFER_LETTER,
+}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -54,6 +73,7 @@ def create_workflow(db: Session, employee_id: int) -> OnboardingWorkflow:
             step_type=step_type,
             step_order=order,
             status=StepStatus.PENDING,
+            requires_approval=step_type in APPROVAL_STEPS,
         )
         db.add(step)
 
@@ -91,11 +111,11 @@ def pause_workflow(db: Session, employee_id: int) -> OnboardingWorkflow:
 
 
 def resume_workflow(db: Session, employee_id: int) -> OnboardingWorkflow:
-    """Resume a paused workflow."""
+    """Resume a paused or approval-waiting workflow."""
     workflow = get_workflow_by_employee(db, employee_id)
     if not workflow:
         raise ValueError("No workflow found")
-    if workflow.status != WorkflowStatus.PAUSED:
+    if workflow.status not in (WorkflowStatus.PAUSED, WorkflowStatus.AWAITING_APPROVAL):
         raise ValueError(f"Cannot resume a workflow with status '{workflow.status.value}'")
     workflow.status = WorkflowStatus.RUNNING
     db.commit()
@@ -137,10 +157,18 @@ async def execute_step(db: Session, step: OnboardingStep, employee: Employee) ->
 
     if step_type == StepType.PARSE_DATA:
         return await _step_parse_data(employee)
+    elif step_type == StepType.DETECT_JURISDICTION:
+        return await _step_detect_jurisdiction(employee)
+    elif step_type == StepType.EMPLOYMENT_CONTRACT:
+        return await _step_employment_contract(db, employee)
+    elif step_type == StepType.NDA:
+        return await _step_nda(db, employee)
+    elif step_type == StepType.EQUITY_AGREEMENT:
+        return await _step_equity_agreement(db, employee)
     elif step_type == StepType.WELCOME_EMAIL:
         return await _step_welcome_email(employee)
     elif step_type == StepType.OFFER_LETTER:
-        return await _step_offer_letter(employee)
+        return await _step_offer_letter(db, employee)
     elif step_type == StepType.PLAN_30_60_90:
         return await _step_30_60_90_plan(employee)
     elif step_type == StepType.SCHEDULE_EVENTS:
@@ -181,6 +209,67 @@ async def _step_parse_data(employee: Employee) -> str:
     })
 
 
+async def _step_detect_jurisdiction(employee: Employee) -> str:
+    """Step 2: Detect and confirm the employee's jurisdiction for document generation."""
+    jurisdiction = employee.jurisdiction or "US"
+    jurisdiction_names = {
+        "US": "United States",
+        "UK": "United Kingdom",
+        "AE": "United Arab Emirates",
+        "DE": "Germany",
+        "SG": "Singapore",
+    }
+    name = jurisdiction_names.get(jurisdiction, jurisdiction)
+
+    return json.dumps({
+        "type": "jurisdiction_detection",
+        "jurisdiction_code": jurisdiction,
+        "jurisdiction_name": name,
+        "summary": f"Employee jurisdiction set to {name} ({jurisdiction}). All legal documents will comply with {name} employment law.",
+    })
+
+
+async def _step_employment_contract(db: Session, employee: Employee) -> str:
+    """Step 3: Generate employment contract using jurisdiction template + LLM + RAG."""
+    doc = await generate_employment_contract(db, employee)
+    # Create approval request for this document
+    create_approval_request(db, employee.id, doc.id)
+    return json.dumps({
+        "type": "employment_contract",
+        "document_id": doc.id,
+        "content": doc.content,
+        "jurisdiction": doc.jurisdiction,
+        "status": "pending_approval",
+    })
+
+
+async def _step_nda(db: Session, employee: Employee) -> str:
+    """Step 4: Generate NDA using jurisdiction template + LLM + RAG."""
+    doc = await generate_nda(db, employee)
+    create_approval_request(db, employee.id, doc.id)
+    return json.dumps({
+        "type": "nda",
+        "document_id": doc.id,
+        "content": doc.content,
+        "jurisdiction": doc.jurisdiction,
+        "status": "pending_approval",
+    })
+
+
+async def _step_equity_agreement(db: Session, employee: Employee) -> str:
+    """Step 5: Generate equity agreement using LLM + RAG (if applicable)."""
+    # Equity is typically for senior/engineering roles — generate for all but mark applicability
+    doc = await generate_equity_agreement(db, employee)
+    create_approval_request(db, employee.id, doc.id)
+    return json.dumps({
+        "type": "equity_agreement",
+        "document_id": doc.id,
+        "content": doc.content,
+        "jurisdiction": doc.jurisdiction,
+        "status": "pending_approval",
+    })
+
+
 async def _step_welcome_email(employee: Employee) -> str:
     """Step 2: Generate welcome email using LLM + RAG context."""
     context_results = rag.query_policies("onboarding welcome email company culture")
@@ -199,21 +288,17 @@ async def _step_welcome_email(employee: Employee) -> str:
     return json.dumps({"type": "welcome_email", "content": email_content})
 
 
-async def _step_offer_letter(employee: Employee) -> str:
-    """Step 3: Generate offer letter using LLM + RAG context."""
-    context_results = rag.query_policies("offer letter employment terms compensation")
-    context = "\n".join([r["text"] for r in context_results])
-
-    prompt = get_template("offer_letter").format(
-        name=employee.name,
-        role=employee.role,
-        department=employee.department,
-        start_date=employee.start_date.isoformat(),
-        manager_email=employee.manager_email or "TBD",
-    )
-
-    letter_content = await llm.generate_text(prompt=prompt, context=context)
-    return json.dumps({"type": "offer_letter", "content": letter_content})
+async def _step_offer_letter(db: Session, employee: Employee) -> str:
+    """Step 6: Generate jurisdiction-aware offer letter using LLM + RAG."""
+    doc = await generate_offer_letter_doc(db, employee)
+    create_approval_request(db, employee.id, doc.id)
+    return json.dumps({
+        "type": "offer_letter",
+        "document_id": doc.id,
+        "content": doc.content,
+        "jurisdiction": doc.jurisdiction,
+        "status": "pending_approval",
+    })
 
 
 async def _step_30_60_90_plan(employee: Employee) -> str:
@@ -278,6 +363,10 @@ async def run_workflow(db: Session, workflow_id: int) -> OnboardingWorkflow:
 
     try:
         for step in workflow.steps:
+            # Skip already-completed steps (important for resume after approval)
+            if step.status == StepStatus.COMPLETED:
+                continue
+
             # Mark step as running
             step.status = StepStatus.RUNNING
             step.started_at = datetime.utcnow()
@@ -288,6 +377,13 @@ async def run_workflow(db: Session, workflow_id: int) -> OnboardingWorkflow:
                 step.status = StepStatus.COMPLETED
                 step.result = result
                 step.completed_at = datetime.utcnow()
+
+                # Approval gate: pause after last document step
+                if step.step_type == StepType.OFFER_LETTER:
+                    workflow.status = WorkflowStatus.AWAITING_APPROVAL
+                    db.commit()
+                    # In non-streaming mode, just mark it — external resume needed
+                    return workflow
             except Exception as e:
                 step.status = StepStatus.FAILED
                 step.error_message = str(e)
@@ -340,6 +436,8 @@ async def run_workflow_stream(db: Session, workflow_id: int) -> AsyncGenerator[s
     yield _sse_event("init", f"Starting onboarding for {employee.name}")
     yield _sse_event("think", f"Employee profile loaded — {employee.role} in {employee.department}, starting {employee.start_date}")
     await asyncio.sleep(0.4)
+    yield _sse_event("think", f"Jurisdiction: {employee.jurisdiction or 'US'} — documents will comply with local employment law")
+    await asyncio.sleep(0.3)
     yield _sse_event("think", f"Manager: {employee.manager_email or 'unassigned'} · Buddy: {employee.buddy_email or 'unassigned'}")
     await asyncio.sleep(0.3)
     yield _sse_event("active", f"Orchestrator initialized — executing {len(workflow.steps)}-step pipeline")
@@ -352,17 +450,45 @@ async def run_workflow_stream(db: Session, workflow_id: int) -> AsyncGenerator[s
             "Checking manager and buddy assignments are present…",
             "Sending profile summary to LLM for completeness analysis…",
         ],
+        "detect_jurisdiction": [
+            f"Detecting employment jurisdiction for {employee.name}…",
+            f"Jurisdiction set to: {employee.jurisdiction or 'US'}…",
+            "Loading jurisdiction-specific legal templates and requirements…",
+            "Verifying available document templates for this jurisdiction…",
+        ],
+        "employment_contract": [
+            f"Loading {employee.jurisdiction or 'US'} employment contract template…",
+            "Querying RAG for company-specific contract terms and conditions…",
+            "Injecting employee details into jurisdiction-compliant contract template…",
+            "Generating employment contract with LLM — ensuring legal compliance…",
+            "Creating approval request for HR review…",
+        ],
+        "nda": [
+            f"Loading {employee.jurisdiction or 'US'} NDA template…",
+            "Querying RAG for confidentiality and IP policies…",
+            "Customizing NDA for role-specific confidentiality needs…",
+            "Generating NDA with jurisdiction-appropriate legal language…",
+            "Creating approval request for HR review…",
+        ],
+        "equity_agreement": [
+            "Analyzing role eligibility for equity compensation…",
+            f"Preparing equity agreement under {employee.jurisdiction or 'US'} securities regulations…",
+            "Querying RAG for company equity plan details and vesting schedules…",
+            "Generating equity agreement with standard vesting terms…",
+            "Creating approval request for HR review…",
+        ],
+        "offer_letter": [
+            f"Loading {employee.jurisdiction or 'US'} offer letter template…",
+            "Querying RAG for compensation and benefits policies…",
+            "Personalizing offer letter with role-specific details…",
+            f"Generating formal offer letter compliant with {employee.jurisdiction or 'US'} law…",
+            "Creating approval request for HR review…",
+        ],
         "welcome_email": [
             "Querying policy documents for company culture and welcome guidelines…",
             "RAG retrieval: searching ChromaDB for 'onboarding welcome email company culture'…",
             "Building prompt with employee details + retrieved policy context…",
             "Generating personalized welcome email via LLM…",
-        ],
-        "offer_letter": [
-            "Querying policy documents for employment terms and compensation guidelines…",
-            "RAG retrieval: searching ChromaDB for 'offer letter employment terms compensation'…",
-            "Injecting role-specific details into offer letter template prompt…",
-            "Generating formal offer letter via LLM with policy compliance…",
         ],
         "plan_30_60_90": [
             "Querying policy documents for onboarding milestones and training frameworks…",
@@ -388,14 +514,17 @@ async def run_workflow_stream(db: Session, workflow_id: int) -> AsyncGenerator[s
         for step in workflow.steps:
             step_label = step.step_type.value.replace("_", " ").title()
 
-            # ── Check if workflow was paused ──
+            # ── Check if workflow was paused or awaiting approval ──
             db.refresh(workflow)
-            if workflow.status == WorkflowStatus.PAUSED:
-                yield _sse_event("active", "Workflow paused — waiting to resume...")
-                while workflow.status == WorkflowStatus.PAUSED:
+            if workflow.status in (WorkflowStatus.PAUSED, WorkflowStatus.AWAITING_APPROVAL):
+                if workflow.status == WorkflowStatus.AWAITING_APPROVAL:
+                    yield _sse_event("active", "⏸ Workflow paused — awaiting human approval for generated documents...")
+                else:
+                    yield _sse_event("active", "Workflow paused — waiting to resume...")
+                while workflow.status in (WorkflowStatus.PAUSED, WorkflowStatus.AWAITING_APPROVAL):
                     await asyncio.sleep(2)
                     db.refresh(workflow)
-                yield _sse_event("active", "Workflow resumed — continuing...")
+                yield _sse_event("active", "Workflow resumed — all approvals received, continuing...")
 
             # Skip already-completed steps (important for retry/resume flows)
             if step.status == StepStatus.COMPLETED:
@@ -460,6 +589,21 @@ async def run_workflow_stream(db: Session, workflow_id: int) -> AsyncGenerator[s
                     step_type=step.step_type.value,
                     step_status="completed",
                 )
+
+                # ── Approval gate: pause after last document-generation step ──
+                if step.step_type == StepType.OFFER_LETTER:
+                    workflow.status = WorkflowStatus.AWAITING_APPROVAL
+                    db.commit()
+                    yield _sse_event(
+                        "approval_gate",
+                        "All legal documents generated — workflow paused for human approval. "
+                        "An HR admin must review and approve each document before onboarding continues.",
+                    )
+                    # Wait until all approvals are processed (approval service resumes workflow)
+                    while workflow.status == WorkflowStatus.AWAITING_APPROVAL:
+                        await asyncio.sleep(2)
+                        db.refresh(workflow)
+                    yield _sse_event("active", "✅ All documents approved — resuming remaining onboarding steps…")
 
             except Exception as e:
                 step.status = StepStatus.FAILED

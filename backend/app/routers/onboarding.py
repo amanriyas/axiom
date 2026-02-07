@@ -192,21 +192,29 @@ async def pause_onboarding(
 # POST /api/onboarding/{employee_id}/resume
 # ───────────────────────────────────────────────────────────────
 
-@router.post("/{employee_id}/resume", response_model=MessageResponse)
+@router.post("/{employee_id}/resume", response_model=OnboardingStartResponse)
 async def resume_onboarding(
     employee_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Resume a paused onboarding workflow."""
+    """Resume a paused or approval-waiting workflow and continue remaining steps."""
     employee = db.query(Employee).filter(Employee.id == employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     try:
-        resume_workflow(db, employee_id)
-        return MessageResponse(message="Workflow resumed")
+        workflow = resume_workflow(db, employee_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # Re-run the workflow in background — it will skip completed steps
+    asyncio.create_task(_run_workflow_background(workflow.id))
+
+    return OnboardingStartResponse(
+        workflow_id=workflow.id,
+        employee_id=employee_id,
+        message="Workflow resumed — executing remaining steps",
+    )
 
 
 # ───────────────────────────────────────────────────────────────

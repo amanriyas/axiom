@@ -61,7 +61,7 @@ class NotificationItem(BaseModel):
     id: str
     title: str
     description: str
-    type: str  # "onboarding" | "employee" | "policy"
+    type: str  # "onboarding" | "employee" | "policy" | "approval"
     timestamp: datetime
     read: bool = False
 
@@ -79,6 +79,7 @@ class EmployeeBase(BaseModel):
     start_date: date
     manager_email: Optional[EmailStr] = None
     buddy_email: Optional[EmailStr] = None
+    jurisdiction: str = Field(default="US", description="Country code (e.g., US, UK, AE, DE, SG)")
 
 
 class EmployeeCreate(EmployeeBase):
@@ -93,6 +94,7 @@ class EmployeeUpdate(BaseModel):
     start_date: Optional[date] = None
     manager_email: Optional[EmailStr] = None
     buddy_email: Optional[EmailStr] = None
+    jurisdiction: Optional[str] = None
     status: Optional[Literal["pending", "onboarding", "completed", "failed"]] = None
 
 
@@ -122,6 +124,148 @@ class PolicyResponse(BaseModel):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Jurisdiction Schemas
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+class JurisdictionInfo(BaseModel):
+    """Summary info for a single jurisdiction."""
+    code: str
+    name: str
+    document_types: list[str] = []
+
+
+class JurisdictionTemplateResponse(BaseModel):
+    id: int
+    jurisdiction_code: str
+    jurisdiction_name: str
+    document_type: str
+    template_content: str
+    legal_requirements: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Document Schemas
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+class GeneratedDocumentResponse(BaseModel):
+    id: int
+    employee_id: int
+    document_type: str
+    jurisdiction: str
+    content: str
+    status: str
+    version: int
+    generated_at: datetime
+    approved_at: Optional[datetime] = None
+    approved_by: Optional[int] = None
+
+    model_config = {"from_attributes": True}
+
+
+class DocumentUpdateRequest(BaseModel):
+    content: str
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Approval Schemas
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+class ApprovalRequestResponse(BaseModel):
+    id: int
+    employee_id: int
+    document_id: int
+    status: str
+    reviewer_id: Optional[int] = None
+    comments: Optional[str] = None
+    created_at: datetime
+    reviewed_at: Optional[datetime] = None
+    # Nested info for display
+    employee_name: Optional[str] = None
+    document_type: Optional[str] = None
+    document_content: Optional[str] = None
+    jurisdiction: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ApprovalActionRequest(BaseModel):
+    comments: Optional[str] = None
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Chat Schemas
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+class ChatMessageCreate(BaseModel):
+    content: str = Field(..., min_length=1)
+
+
+class ChatMessageResponse(BaseModel):
+    id: int
+    conversation_id: int
+    role: str
+    content: str
+    sources: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ChatConversationResponse(BaseModel):
+    id: int
+    user_id: Optional[int] = None
+    title: str
+    started_at: datetime
+    last_message_at: datetime
+    messages: list[ChatMessageResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Compliance Schemas
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+class ComplianceItemCreate(BaseModel):
+    employee_id: int
+    item_type: str = Field(..., description="visa, work_permit, certification, training, equipment")
+    description: str
+    expiry_date: date
+
+
+class ComplianceItemResponse(BaseModel):
+    id: int
+    employee_id: int
+    item_type: str
+    description: str
+    expiry_date: date
+    status: str
+    reminder_sent: bool
+    created_at: datetime
+    # Enriched fields
+    employee_name: Optional[str] = None
+    days_remaining: Optional[int] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ComplianceSummary(BaseModel):
+    valid: int
+    expiring_soon: int
+    expired: int
+    total: int
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Onboarding Schemas
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -133,6 +277,8 @@ class OnboardingStepResponse(BaseModel):
     status: str
     result: Optional[str] = None
     error_message: Optional[str] = None
+    requires_approval: bool = False
+    approval_status: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
