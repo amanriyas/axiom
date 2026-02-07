@@ -172,12 +172,7 @@ export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [activeScreenshot, setActiveScreenshot] = useState(0);
 
-  useEffect(() => {
-    const token = getToken();
-    if (token) {
-      router.push("/dashboard");
-    }
-  }, [router]);
+  // Removed auto-redirect for logged-in users so they can visit the landing page
 
   useEffect(() => {
     const handleScroll = () => {

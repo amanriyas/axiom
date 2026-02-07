@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     clearToken();
     setUser(null);
-    router.push("/login");
+     router.push("/");
   }, [router]);
 
   const clearError = useCallback(() => {

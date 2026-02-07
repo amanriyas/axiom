@@ -153,6 +153,11 @@ export default function SignupPage() {
             Sign in
           </Link>
         </p>
+        <p className="text-center text-xs text-muted-foreground pt-1">
+          <Link href="/" className="hover:underline">
+            Back to landing page
+          </Link>
+        </p>
       </CardContent>
     </Card>
   );
