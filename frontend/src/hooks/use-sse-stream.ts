@@ -15,6 +15,10 @@ export function useSSEStream(url: string | null, options: UseSSEStreamOptions = 
   const [error, setError] = useState<Error | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
+  // Stabilize callbacks in a ref so they never cause reconnection
+  const callbacksRef = useRef(options);
+  callbacksRef.current = options;
+
   const clearEvents = useCallback(() => {
     setEvents([]);
   }, []);
@@ -34,11 +38,11 @@ export function useSSEStream(url: string | null, options: UseSSEStreamOptions = 
       try {
         const data = JSON.parse(event.data) as AgentEvent;
         setEvents((prev) => [...prev, data]);
-        options.onEvent?.(data);
+        callbacksRef.current.onEvent?.(data);
 
         // Check for completion
         if (data.type === "done" && data.message.includes("complete")) {
-          options.onComplete?.();
+          callbacksRef.current.onComplete?.();
         }
       } catch (e) {
         console.error("Failed to parse SSE event:", e);
@@ -49,11 +53,11 @@ export function useSSEStream(url: string | null, options: UseSSEStreamOptions = 
       const err = new Error("SSE connection error");
       setError(err);
       setIsConnected(false);
-      options.onError?.(err);
+      callbacksRef.current.onError?.(err);
       eventSource.close();
       eventSourceRef.current = null;
     };
-  }, [url, options]);
+  }, [url]); // Only depends on url — callbacks are read from ref
 
   const disconnect = useCallback(() => {
     if (eventSourceRef.current) {

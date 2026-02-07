@@ -63,11 +63,20 @@ export default function DashboardPage() {
   }, []);
 
   // Calculate stats
+  const completedEmployees = employees.filter((e) => e.status === "completed");
+  const avgTimeDays = completedEmployees.length > 0
+    ? completedEmployees.reduce((sum, e) => {
+        const start = new Date(e.created_at).getTime();
+        const end = new Date(e.updated_at).getTime();
+        return sum + (end - start) / (1000 * 60 * 60 * 24);
+      }, 0) / completedEmployees.length
+    : 0;
+
   const stats = {
     pending: employees.filter((e) => e.status === "pending").length,
     inProgress: employees.filter((e) => e.status === "onboarding").length,
-    completed: employees.filter((e) => e.status === "completed").length,
-    avgTime: 3.2,
+    completed: completedEmployees.length,
+    avgTime: Math.round(avgTimeDays * 10) / 10,
   };
 
   const recentEmployees = employees.slice(0, 5);
@@ -104,26 +113,21 @@ export default function DashboardPage() {
             <StatsCard
               title="Pending Onboardings"
               value={stats.pending}
-              trend={2}
               icon={<Clock className="h-5 w-5 text-primary" />}
             />
             <StatsCard
               title="In Progress"
               value={stats.inProgress}
-              trend={0}
               icon={<RefreshCw className="h-5 w-5 text-primary" />}
             />
             <StatsCard
               title="Completed This Month"
               value={stats.completed}
-              trend={1}
               icon={<CheckCircle className="h-5 w-5 text-primary" />}
             />
             <StatsCard
               title="Avg. Time to Complete"
-              value={`${stats.avgTime}d`}
-              trend={-0.5}
-              trendLabel="d"
+              value={stats.avgTime > 0 ? `${stats.avgTime}d` : "N/A"}
               icon={<Timer className="h-5 w-5 text-primary" />}
             />
           </div>

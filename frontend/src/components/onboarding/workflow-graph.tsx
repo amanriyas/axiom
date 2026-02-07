@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   ReactFlow,
   Background,
@@ -168,7 +168,7 @@ export function WorkflowGraph({ steps, onNodeClick }: WorkflowGraphProps) {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   // Update nodes when steps change
-  useMemo(() => {
+  useEffect(() => {
     setNodes((nds) =>
       nds.map((node) => ({
         ...node,
