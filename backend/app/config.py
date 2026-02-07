@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://axiom-chi-eight.vercel.app",
     ]
     CORS_ORIGINS_STR: str = ""  # Comma-separated extra origins for production
 

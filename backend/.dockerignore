@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+venv/
+.venv/
+env/
+
+# Data — mounted as volume, not baked into image
+data/
+
+# Environment files (secrets — created on VM, not in image)
+.env
+.env.local
+.env.production
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Railway config (not needed for AWS)
+railway.toml
+Procfile
+runtime.txt
+
+# Tests (optional — exclude to keep image smaller)
+# tests/

@@ -1,0 +1,20 @@
+# ===========================
+# Axiom Backend — Docker Compose
+# ===========================
+
+services:
+  axiom-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: axiom-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist SQLite DB, ChromaDB, uploaded PDFs, and template overrides
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - DEBUG=False
+    restart: unless-stopped

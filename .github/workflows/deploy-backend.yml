@@ -1,0 +1,44 @@
+# ===========================
+# Deploy Axiom Backend to AWS EC2
+# ===========================
+# Triggers on push to main when backend/ files change.
+# SSHs into the EC2 VM, pulls latest code, rebuilds and restarts the Docker container.
+
+name: Deploy Backend to AWS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USER }}
+          key: ${{ secrets.AWS_SSH_KEY }}
+          script_stop: true
+          script: |
+            echo "📦 Pulling latest code..."
+            cd ~/axiom
+            git pull origin main
+
+            echo "🐳 Building and starting container..."
+            cd backend
+            docker compose up --build -d
+
+            echo "⏳ Waiting for health check..."
+            sleep 10
+
+            echo "🔍 Checking health..."
+            curl --fail --silent http://localhost:8000/ | head -c 200
+            echo ""
+            echo "✅ Deployment complete!"
