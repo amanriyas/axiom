@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { employeeApi } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
 import { Employee } from "@/types";
 
 function formatTimeAgo(date: string): string {
@@ -47,8 +48,10 @@ export default function DashboardPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const { user } = useAuth();
 
   useEffect(() => {
+    if (!user) return; // Wait for auth to be confirmed
     const fetchEmployees = async () => {
       try {
         const data = await employeeApi.list();
@@ -60,7 +63,7 @@ export default function DashboardPage() {
       }
     };
     fetchEmployees();
-  }, []);
+  }, [user]);
 
   // Calculate stats
   const completedEmployees = employees.filter((e) => e.status === "completed");

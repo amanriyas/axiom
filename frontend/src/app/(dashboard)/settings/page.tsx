@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TopNav } from "@/components/layout/top-nav";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +16,26 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
+import { authApi, onboardingApi } from "@/lib/api";
 import { toast } from "sonner";
 import {
   Calendar,
@@ -33,6 +52,8 @@ import {
   EyeOff,
   Crown,
   UserCog,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 // ── Integrations ──
@@ -253,11 +274,63 @@ const TEAM_MEMBERS: TeamMember[] = [
 export default function SettingsPage() {
   const { user } = useAuth();
 
-  // Templates state
+  // Templates state — loaded from backend on mount, persisted to backend + localStorage
   const [templates, setTemplates] = useState<OnboardingTemplate[]>(DEFAULT_TEMPLATES);
   const [editingTemplate, setEditingTemplate] = useState<string | null>(null);
   const [editBuffer, setEditBuffer] = useState("");
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null);
+  const [addTemplateOpen, setAddTemplateOpen] = useState(false);
+  const [deleteTemplateId, setDeleteTemplateId] = useState<string | null>(null);
+  const [newTemplate, setNewTemplate] = useState({
+    name: "",
+    description: "",
+    prompt: "",
+  });
+
+  // Load templates from backend on mount
+  useEffect(() => {
+    onboardingApi.getTemplates().then((serverTemplates) => {
+      setTemplates((prev) => {
+        // Update existing template prompts from server
+        const updated = prev.map((t) => {
+          const override = serverTemplates[t.id];
+          return override ? { ...t, prompt: override } : t;
+        });
+        // Add any custom templates from server that aren't in defaults
+        const existingIds = new Set(updated.map((t) => t.id));
+        const custom = Object.entries(serverTemplates)
+          .filter(([id]) => !existingIds.has(id))
+          .map(([id, prompt]) => ({
+            id,
+            name: id.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            description: "Custom template",
+            icon: FileText as typeof Mail,
+            prompt,
+          }));
+        return [...updated, ...custom];
+      });
+    }).catch(() => {
+      // Fallback: try localStorage
+      try {
+        const saved = localStorage.getItem("axiom_templates");
+        if (saved) {
+          const parsed = JSON.parse(saved) as { id: string; prompt: string }[];
+          setTemplates((prev) =>
+            prev.map((t) => {
+              const override = parsed.find((p) => p.id === t.id);
+              return override ? { ...t, prompt: override.prompt } : t;
+            })
+          );
+        }
+      } catch { /* use defaults */ }
+    });
+  }, []);
+
+  // Persist template edits to localStorage (backup)
+  useEffect(() => {
+    const data = templates.map((t) => ({ id: t.id, prompt: t.prompt }));
+    localStorage.setItem("axiom_templates", JSON.stringify(data));
+  }, [templates]);
 
   // Account state
   const [accountName, setAccountName] = useState(user?.name ?? "");
@@ -293,7 +366,16 @@ export default function SettingsPage() {
       prev.map((t) => (t.id === id ? { ...t, prompt: editBuffer } : t))
     );
     setEditingTemplate(null);
-    toast.success("Template saved");
+    // Persist to backend
+    const updated = templates.reduce<Record<string, string>>((acc, t) => {
+      acc[t.id] = t.id === id ? editBuffer : t.prompt;
+      return acc;
+    }, {});
+    onboardingApi.updateTemplates(updated).then(() => {
+      toast.success("Template saved to server");
+    }).catch(() => {
+      toast.success("Template saved locally (server sync failed)");
+    });
   };
 
   const resetTemplate = (id: string) => {
@@ -303,15 +385,79 @@ export default function SettingsPage() {
         prev.map((t) => (t.id === id ? { ...t, prompt: original.prompt } : t))
       );
       setEditingTemplate(null);
+      // Persist reset to backend
+      const updated = templates.reduce<Record<string, string>>((acc, t) => {
+        acc[t.id] = t.id === id ? original.prompt : t.prompt;
+        return acc;
+      }, {});
+      onboardingApi.updateTemplates(updated).catch(() => {});
       toast.info("Template reset to default");
     }
   };
 
-  const handleSaveProfile = () => {
-    toast.success("Profile updated successfully");
+  const handleAddTemplate = () => {
+    if (!newTemplate.name.trim() || !newTemplate.prompt.trim()) {
+      toast.error("Please provide a name and prompt");
+      return;
+    }
+    const id = newTemplate.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "");
+    if (templates.some((t) => t.id === id)) {
+      toast.error("A template with this name already exists");
+      return;
+    }
+    const tpl: OnboardingTemplate = {
+      id,
+      name: newTemplate.name.trim(),
+      description: newTemplate.description.trim() || "Custom template",
+      icon: FileText,
+      prompt: newTemplate.prompt.trim(),
+    };
+    const next = [...templates, tpl];
+    setTemplates(next);
+    // Persist to backend
+    const updated = next.reduce<Record<string, string>>((acc, t) => {
+      acc[t.id] = t.prompt;
+      return acc;
+    }, {});
+    onboardingApi.updateTemplates(updated).then(() => {
+      toast.success("Template added and saved");
+    }).catch(() => {
+      toast.success("Template added locally");
+    });
+    setAddTemplateOpen(false);
+    setNewTemplate({ name: "", description: "", prompt: "" });
   };
 
-  const handleChangePassword = () => {
+  const handleDeleteTemplate = (id: string) => {
+    const next = templates.filter((t) => t.id !== id);
+    setTemplates(next);
+    setDeleteTemplateId(null);
+    // Persist to backend — only send remaining templates
+    const updated = next.reduce<Record<string, string>>((acc, t) => {
+      acc[t.id] = t.prompt;
+      return acc;
+    }, {});
+    onboardingApi.updateTemplates(updated).then(() => {
+      toast.success("Template deleted");
+    }).catch(() => {
+      toast.success("Template removed locally");
+    });
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      await authApi.updateProfile({ name: accountName, email: accountEmail });
+      toast.success("Profile updated successfully");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to update profile";
+      toast.error(msg);
+    }
+  };
+
+  const handleChangePassword = async () => {
     if (!currentPassword) {
       toast.error("Please enter your current password");
       return;
@@ -324,10 +470,19 @@ export default function SettingsPage() {
       toast.error("Passwords do not match");
       return;
     }
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    toast.success("Password changed successfully");
+    try {
+      await authApi.changePassword({
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("Password changed successfully");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to change password";
+      toast.error(msg);
+    }
   };
 
   const handleInvite = () => {
@@ -400,11 +555,19 @@ export default function SettingsPage() {
           <TabsContent value="templates" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Onboarding Templates</CardTitle>
-                <CardDescription>
-                  Customize the AI prompts used to generate onboarding documents.
-                  Changes apply to all future onboarding workflows.
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Onboarding Templates</CardTitle>
+                    <CardDescription className="mt-1.5">
+                      Customize the AI prompts used to generate onboarding documents.
+                      Changes apply to all future onboarding workflows.
+                    </CardDescription>
+                  </div>
+                  <Button onClick={() => setAddTemplateOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Template
+                  </Button>
+                </div>
               </CardHeader>
             </Card>
 
@@ -491,6 +654,15 @@ export default function SettingsPage() {
                               title="Reset to default"
                             >
                               <RotateCcw className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setDeleteTemplateId(tpl.id)}
+                              title="Delete template"
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </>
                         )}
@@ -792,6 +964,98 @@ export default function SettingsPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Add Template Dialog */}
+      <Dialog open={addTemplateOpen} onOpenChange={setAddTemplateOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add New Template</DialogTitle>
+            <DialogDescription>
+              Create a custom prompt template for onboarding document generation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tpl-name">Template Name *</Label>
+              <Input
+                id="tpl-name"
+                value={newTemplate.name}
+                onChange={(e) =>
+                  setNewTemplate({ ...newTemplate, name: e.target.value })
+                }
+                placeholder="e.g. Security Checklist"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tpl-desc">Description</Label>
+              <Input
+                id="tpl-desc"
+                value={newTemplate.description}
+                onChange={(e) =>
+                  setNewTemplate({ ...newTemplate, description: e.target.value })
+                }
+                placeholder="Brief description of what this template generates"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tpl-prompt">Prompt *</Label>
+              <Textarea
+                id="tpl-prompt"
+                value={newTemplate.prompt}
+                onChange={(e) =>
+                  setNewTemplate({ ...newTemplate, prompt: e.target.value })
+                }
+                placeholder="Write the AI prompt that will be used to generate this document..."
+                className="min-h-40 font-mono text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setAddTemplateOpen(false);
+                  setNewTemplate({ name: "", description: "", prompt: "" });
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleAddTemplate}
+                disabled={!newTemplate.name.trim() || !newTemplate.prompt.trim()}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Template
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Template Confirmation */}
+      <AlertDialog
+        open={!!deleteTemplateId}
+        onOpenChange={(open) => !open && setDeleteTemplateId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Template</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the &quot;
+              {templates.find((t) => t.id === deleteTemplateId)?.name}
+              &quot; template? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTemplateId && handleDeleteTemplate(deleteTemplateId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -130,3 +130,19 @@ async def get_current_user(
             detail="Inactive user",
         )
     return user
+
+
+def verify_token_string(token: str, db: Session) -> Optional[User]:
+    """
+    Verify a raw JWT string and return the user (or None).
+    Used for SSE endpoints where Authorization headers aren't available.
+    """
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = int(payload.get("sub"))
+        user = get_user_by_id(db, user_id)
+        if user and user.is_active:
+            return user
+    except (JWTError, TypeError, ValueError):
+        pass
+    return None

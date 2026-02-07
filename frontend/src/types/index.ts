@@ -85,7 +85,7 @@ export type StepType =
 
 export type StepStatus = "pending" | "running" | "completed" | "failed" | "skipped";
 
-export type WorkflowStatus = "pending" | "running" | "completed" | "failed";
+export type WorkflowStatus = "pending" | "running" | "paused" | "completed" | "failed";
 
 export interface OnboardingStep {
   id: number;
@@ -153,4 +153,14 @@ export interface DashboardStats {
   in_progress_trend: number;
   completed_trend: number;
   avg_time_trend: number;
+}
+
+// Notification type
+export interface Notification {
+  id: string;
+  title: string;
+  description: string;
+  type: "onboarding" | "employee" | "policy";
+  timestamp: string;
+  read: boolean;
 }

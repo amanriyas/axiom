@@ -53,9 +53,14 @@ app = FastAPI(
 )
 
 # ── CORS Middleware ─────────────────────────────────────────
+# Merge default origins with any extra production origins from CORS_ORIGINS_STR
+_cors_origins = list(settings.CORS_ORIGINS)
+if settings.CORS_ORIGINS_STR:
+    _cors_origins.extend([o.strip() for o in settings.CORS_ORIGINS_STR.split(",") if o.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

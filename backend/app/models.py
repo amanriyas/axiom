@@ -57,6 +57,7 @@ class StepStatus(str, enum.Enum):
 class WorkflowStatus(str, enum.Enum):
     PENDING = "pending"
     RUNNING = "running"
+    PAUSED = "paused"
     COMPLETED = "completed"
     FAILED = "failed"
 

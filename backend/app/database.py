@@ -7,11 +7,17 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from app.config import settings
 
 # ── Engine ───────────────────────────────────────────────────
-# connect_args needed for SQLite to allow multi-thread access
+# connect_args needed for SQLite to allow multi-thread access;
+# not needed (and unsupported) for PostgreSQL.
+_connect_args = {}
+if settings.DATABASE_URL.startswith("sqlite"):
+    _connect_args["check_same_thread"] = False
+
 engine = create_engine(
     settings.DATABASE_URL,
-    connect_args={"check_same_thread": False},
+    connect_args=_connect_args,
     echo=settings.DEBUG,
+    pool_pre_ping=True,
 )
 
 # ── Session factory ──────────────────────────────────────────

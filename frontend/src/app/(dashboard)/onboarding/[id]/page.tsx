@@ -31,6 +31,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { employeeApi, onboardingApi } from "@/lib/api";
 import { useSSEStream } from "@/hooks/use-sse-stream";
@@ -102,6 +109,7 @@ export default function OnboardingWorkflowPage() {
   const [isPaused, setIsPaused] = useState(false);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [outputsExpanded, setOutputsExpanded] = useState(true);
+  const [viewingStep, setViewingStep] = useState<OnboardingStep | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -143,6 +151,7 @@ export default function OnboardingWorkflowPage() {
     try {
       const wf = await onboardingApi.getStatus(employeeId);
       setWorkflow(wf);
+      setIsPaused(wf.status === "paused");
     } catch {
       // Ignore errors during polling
     }
@@ -163,9 +172,130 @@ export default function OnboardingWorkflowPage() {
     }
   };
 
-  const handlePauseResume = () => {
-    setIsPaused(!isPaused);
-    toast.info(isPaused ? "Workflow resumed" : "Workflow paused");
+  const handlePause = async () => {
+    try {
+      await onboardingApi.pause(employeeId);
+      setIsPaused(true);
+      toast.info("Workflow paused");
+      await fetchWorkflowStatus();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to pause";
+      toast.error(msg);
+    }
+  };
+
+  const handleResume = async () => {
+    try {
+      await onboardingApi.resume(employeeId);
+      setIsPaused(false);
+      toast.info("Workflow resumed");
+      await fetchWorkflowStatus();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to resume";
+      toast.error(msg);
+    }
+  };
+
+  const handleRetry = async () => {
+    try {
+      await onboardingApi.retry(employeeId);
+      toast.success("Retrying failed steps...");
+      setStreamUrl(onboardingApi.getStreamUrl(employeeId));
+      await fetchWorkflowStatus();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to retry";
+      toast.error(msg);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const token = (await import("@/lib/api")).getToken();
+      const res = await fetch(onboardingApi.getExportUrl(employeeId), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Export failed");
+      const mdText = await res.text();
+
+      // Generate PDF using jsPDF
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 15;
+      const usableWidth = pageWidth - margin * 2;
+      let y = margin;
+
+      const addPage = () => {
+        doc.addPage();
+        y = margin;
+      };
+
+      const checkPageBreak = (needed: number) => {
+        if (y + needed > pageHeight - margin) {
+          addPage();
+        }
+      };
+
+      const lines = mdText.split("\n");
+      for (const line of lines) {
+        if (line.startsWith("# ")) {
+          // Title
+          checkPageBreak(14);
+          doc.setFontSize(18);
+          doc.setFont("helvetica", "bold");
+          const wrapped = doc.splitTextToSize(line.replace(/^# /, ""), usableWidth);
+          doc.text(wrapped, margin, y);
+          y += wrapped.length * 8 + 4;
+        } else if (line.startsWith("## ")) {
+          // Section header
+          checkPageBreak(12);
+          doc.setFontSize(14);
+          doc.setFont("helvetica", "bold");
+          const wrapped = doc.splitTextToSize(line.replace(/^## /, ""), usableWidth);
+          doc.text(wrapped, margin, y);
+          y += wrapped.length * 7 + 3;
+        } else if (line.startsWith("### ")) {
+          checkPageBreak(10);
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          const wrapped = doc.splitTextToSize(line.replace(/^### /, ""), usableWidth);
+          doc.text(wrapped, margin, y);
+          y += wrapped.length * 6 + 2;
+        } else if (line.startsWith("---")) {
+          checkPageBreak(6);
+          doc.setDrawColor(200, 200, 200);
+          doc.line(margin, y, pageWidth - margin, y);
+          y += 4;
+        } else if (line.startsWith("**") && line.includes(":**")) {
+          // Bold key-value
+          checkPageBreak(7);
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          const clean = line.replace(/\*\*/g, "").replace(/\s\s$/, "");
+          const wrapped = doc.splitTextToSize(clean, usableWidth);
+          doc.text(wrapped, margin, y);
+          y += wrapped.length * 5 + 1;
+        } else if (line.trim() === "") {
+          y += 3;
+        } else {
+          checkPageBreak(6);
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          const clean = line.replace(/```/g, "");
+          const wrapped = doc.splitTextToSize(clean, usableWidth);
+          doc.text(wrapped, margin, y);
+          y += wrapped.length * 5 + 1;
+        }
+      }
+
+      const safeName = employee?.name?.replace(/\s+/g, "_").toLowerCase() || String(employeeId);
+      doc.save(`onboarding_report_${safeName}.pdf`);
+      toast.success("PDF report downloaded");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Export failed";
+      toast.error(msg);
+    }
   };
 
   const getInitials = (name: string) => {
@@ -212,10 +342,22 @@ export default function OnboardingWorkflowPage() {
     return workflow.steps
       .filter((s) => s.status === "completed" && s.result)
       .map((s) => ({
+        step: s,
         stepType: s.step_type,
         label: stepConfig[s.step_type].label,
         icon: stepConfig[s.step_type].icon,
       }));
+  };
+
+  const openStepOutput = (stepType: StepType) => {
+    const step = workflow?.steps.find(
+      (s) => s.step_type === stepType && s.status === "completed" && s.result
+    );
+    if (step) {
+      setViewingStep(step);
+    } else {
+      toast.info("No output available for this step yet");
+    }
   };
 
   if (loading) {
@@ -293,8 +435,8 @@ export default function OnboardingWorkflowPage() {
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar - Employee Info & Progress */}
-        <div className="w-72 border-r border-border bg-background flex flex-col shrink-0">
-          <ScrollArea className="flex-1">
+        <div className="w-72 border-r border-border bg-background flex flex-col shrink-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
             <div className="p-4 space-y-6">
               {/* Employee Profile */}
               <div className="space-y-4">
@@ -426,6 +568,7 @@ export default function OnboardingWorkflowPage() {
                             variant="ghost"
                             className="w-full justify-start text-sm h-9"
                             size="sm"
+                            onClick={() => openStepOutput(output.stepType)}
                           >
                             <Icon className="mr-2 h-4 w-4 text-[#14b8a6]" />
                             {output.label}
@@ -437,7 +580,7 @@ export default function OnboardingWorkflowPage() {
                 )}
               </div>
             </div>
-          </ScrollArea>
+          </div>
         </div>
 
         {/* Center - Workflow Graph */}
@@ -451,18 +594,15 @@ export default function OnboardingWorkflowPage() {
             <WorkflowGraph
               steps={workflow?.steps || []}
               onNodeClick={(stepType) => {
-                const step = workflow?.steps.find((s) => s.step_type === stepType);
-                if (step?.result) {
-                  toast.info(`${stepConfig[stepType].label}: View output`);
-                }
+                openStepOutput(stepType as StepType);
               }}
             />
           </div>
         </div>
 
         {/* Right Panel - Agent Reasoning */}
-        <div className="w-80 border-l border-border bg-background flex flex-col">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <div className="w-80 border-l border-border bg-background flex flex-col overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-[#22c55e] animate-pulse" />
               <h2 className="text-sm font-semibold uppercase tracking-wide text-[#14b8a6]">
@@ -474,7 +614,7 @@ export default function OnboardingWorkflowPage() {
               Clear
             </Button>
           </div>
-          <ScrollArea className="flex-1" ref={scrollRef}>
+          <div className="flex-1 overflow-y-auto" ref={scrollRef}>
             <div className="p-4 space-y-3 font-mono text-sm">
               {events.length === 0 ? (
                 <p className="text-muted-foreground italic text-center py-8">
@@ -489,15 +629,20 @@ export default function OnboardingWorkflowPage() {
                     <p className={`${getEventTypeColor(event.type)} break-words`}>
                       {event.type === "done" && "✓ "}
                       {event.type === "task" && "▶ "}
+                      {event.type === "think" && "💭 "}
+                      {event.type === "init" && "🚀 "}
+                      {event.type === "active" && "⚡ "}
+                      {event.type === "error" && "✗ "}
+                      {event.type === "step_update" && "📋 "}
                       {event.message}
                     </p>
                   </div>
                 ))
               )}
             </div>
-          </ScrollArea>
-          <div className="border-t px-4 py-2 text-xs text-muted-foreground">
-            Agent: GPT-4 Turbo • Tokens: {events.length * 50}
+          </div>
+          <div className="border-t px-4 py-2 text-xs text-muted-foreground shrink-0">
+            Agent: Axiom Orchestrator • Events: {events.length}
           </div>
         </div>
       </div>
@@ -513,8 +658,8 @@ export default function OnboardingWorkflowPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={handlePauseResume}
-            disabled={!workflow || workflow.status === "completed" || workflow.status === "failed"}
+            onClick={handlePause}
+            disabled={!workflow || isPaused || workflow.status !== "running"}
           >
             <Pause className="mr-2 h-4 w-4" />
             Pause
@@ -522,8 +667,8 @@ export default function OnboardingWorkflowPage() {
           <Button
             variant="default"
             size="sm"
-            onClick={handlePauseResume}
-            disabled={!workflow || workflow.status === "completed" || workflow.status === "failed"}
+            onClick={handleResume}
+            disabled={!workflow || !isPaused || workflow.status !== "paused"}
             className="bg-[#14b8a6] hover:bg-[#14b8a6]/90"
           >
             <Play className="mr-2 h-4 w-4" />
@@ -552,16 +697,73 @@ export default function OnboardingWorkflowPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" disabled={!workflow}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!workflow || workflow.status !== "failed"}
+            onClick={handleRetry}
+          >
             <RefreshCw className="mr-2 h-4 w-4" />
             Retry Failed
           </Button>
-          <Button variant="outline" size="sm" disabled={!workflow}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!workflow || workflow.status === "pending"}
+            onClick={handleExport}
+          >
             <FileDown className="mr-2 h-4 w-4" />
             Export Report
           </Button>
         </div>
       </div>
+
+      {/* Generated Content Viewer Modal */}
+      <Dialog open={!!viewingStep} onOpenChange={(open) => !open && setViewingStep(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {viewingStep && (() => {
+                const Icon = stepConfig[viewingStep.step_type]?.icon;
+                return Icon ? <Icon className="h-5 w-5 text-[#14b8a6]" /> : null;
+              })()}
+              {viewingStep ? stepConfig[viewingStep.step_type]?.label : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Generated {viewingStep?.completed_at
+                ? new Date(viewingStep.completed_at).toLocaleString()
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto mt-4 pr-2">
+            <pre className="whitespace-pre-wrap text-sm font-sans leading-relaxed text-foreground">
+                {(() => {
+                  if (!viewingStep?.result) return "";
+                  try {
+                    const parsed = JSON.parse(viewingStep.result);
+                    // Extract readable content from JSON
+                    if (parsed.content) return parsed.content;
+                    if (parsed.ai_summary) return parsed.ai_summary;
+                    if (parsed.events) {
+                      return parsed.events
+                        .map((e: { title: string; date: string; status: string }) =>
+                          `📅 ${e.title}\n   Date: ${e.date}\n   Status: ${e.status}`
+                        )
+                        .join("\n\n");
+                    }
+                    if (parsed.parsed_data && parsed.ai_summary) {
+                      return parsed.ai_summary;
+                    }
+                    // Fallback: pretty-print JSON
+                    return JSON.stringify(parsed, null, 2);
+                  } catch {
+                    return viewingStep.result;
+                  }
+                })()}
+              </pre>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

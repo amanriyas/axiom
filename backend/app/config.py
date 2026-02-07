@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # ── Application ──────────────────────────────────────────
     APP_NAME: str = "Zero-Touch Onboarding Orchestrator"
-    DEBUG: bool = True
+    DEBUG: bool = False
 
     # ── Database ─────────────────────────────────────────────
     DATABASE_URL: str = "sqlite:///./data/onboarding.db"
@@ -46,6 +46,7 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
+    CORS_ORIGINS_STR: str = ""  # Comma-separated extra origins for production
 
 
 # Singleton settings instance

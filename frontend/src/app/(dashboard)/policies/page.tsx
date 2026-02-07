@@ -9,6 +9,10 @@ import {
   X,
   Loader2,
   Check,
+  AlertCircle,
+  Download,
+  Eye,
+  RefreshCw,
 } from "lucide-react";
 import { TopNav } from "@/components/layout/top-nav";
 import { Button } from "@/components/ui/button";
@@ -59,6 +63,7 @@ export default function PoliciesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [policyToDelete, setPolicyToDelete] = useState<Policy | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reembedding, setReembedding] = useState<number | null>(null);
 
   // Upload form state
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -143,6 +148,62 @@ export default function PoliciesPage() {
     setPolicyTitle("");
   };
 
+  const handleReembed = async (policyId: number) => {
+    setReembedding(policyId);
+    try {
+      await policyApi.reembed(policyId);
+      toast.success("Policy re-embedded successfully");
+      fetchPolicies();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Re-embedding failed";
+      toast.error(message);
+    } finally {
+      setReembedding(null);
+    }
+  };
+
+  const handleViewPdf = (policy: Policy) => {
+    const token = localStorage.getItem("access_token");
+    const url = policyApi.getDownloadUrl(policy.id);
+    // Open in new tab — the browser will render the PDF
+    const w = window.open("", "_blank");
+    if (w) {
+      // Fetch with auth then display
+      fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+        .then((res) => res.blob())
+        .then((blob) => {
+          const blobUrl = URL.createObjectURL(blob);
+          w.location.href = blobUrl;
+        })
+        .catch(() => {
+          w.close();
+          toast.error("Failed to open PDF");
+        });
+    }
+  };
+
+  const handleDownloadPdf = async (policy: Policy) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const url = policyApi.getDownloadUrl(policy.id);
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = policy.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      toast.error("Failed to download PDF");
+    }
+  };
+
   return (
     <div className="flex flex-col">
       <TopNav title="Policy Documents" />
@@ -197,7 +258,7 @@ export default function PoliciesPage() {
                     <TableHead>Uploaded</TableHead>
                     <TableHead>Size</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="w-12"></TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -222,28 +283,62 @@ export default function PoliciesPage() {
                       </TableCell>
                       <TableCell>
                         {policy.is_embedded ? (
-                          <span className="inline-flex items-center gap-1.5 text-sm text-[#22c55e]">
+                          <span className="inline-flex items-center gap-1.5 text-sm text-[#22c55e]" title="Document has been indexed and is available for RAG queries">
                             <Check className="h-4 w-4" />
                             Indexed
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 text-sm text-[#f59e0b]">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Processing
+                          <span className="inline-flex items-center gap-1.5 text-sm text-[#ef4444]" title="Embedding failed — document text could not be extracted or Voyage AI was unreachable. Click Re-embed to retry.">
+                            <AlertCircle className="h-4 w-4" />
+                            Not Indexed
                           </span>
                         )}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setPolicyToDelete(policy);
-                            setDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="View PDF"
+                            onClick={() => handleViewPdf(policy)}
+                          >
+                            <Eye className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Download PDF"
+                            onClick={() => handleDownloadPdf(policy)}
+                          >
+                            <Download className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                          {!policy.is_embedded && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Re-embed for RAG"
+                              disabled={reembedding === policy.id}
+                              onClick={() => handleReembed(policy.id)}
+                            >
+                              {reembedding === policy.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Delete"
+                            onClick={() => {
+                              setPolicyToDelete(policy);
+                              setDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

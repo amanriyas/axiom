@@ -440,7 +440,7 @@ export default function EmployeesPage() {
 
       {/* Add Employee Dialog */}
       <Dialog open={addDialogOpen} onOpenChange={closeAddDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Employee</DialogTitle>
             <DialogDescription>
@@ -538,7 +538,7 @@ export default function EmployeesPage() {
 
       {/* Edit Employee Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={closeEditDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Employee</DialogTitle>
             <DialogDescription>

@@ -41,6 +41,7 @@ def _get_collection():
 
         # Determine embedding function (priority: Voyage > OpenAI > default)
         embedding_function = None
+        expected_dim = None
 
         # 1. Try Voyage AI first
         if settings.VOYAGE_API_KEY:
@@ -48,6 +49,7 @@ def _get_collection():
                 from app.services.embeddings import VoyageEmbeddingFunction
 
                 embedding_function = VoyageEmbeddingFunction()
+                expected_dim = 1024  # voyage-3-lite produces 1024-dim vectors
                 print(f"✅ RAG: Using Voyage AI embeddings (model: {embedding_function.model})")
             except Exception as e:
                 print(f"⚠️  Voyage AI embedding init failed: {e}. Trying OpenAI fallback...")
@@ -69,6 +71,9 @@ def _get_collection():
         if embedding_function is None:
             print("ℹ️  RAG: No embedding API key set — using default sentence-transformer embeddings")
 
+        # Check for dimension mismatch and recreate collection if needed
+        _check_and_fix_dimension_mismatch(_chroma_client, expected_dim)
+
         if embedding_function:
             _collection = _chroma_client.get_or_create_collection(
                 name="policy_documents",
@@ -87,6 +92,31 @@ def _get_collection():
     except Exception as e:
         print(f"⚠️  ChromaDB initialization failed: {e}. RAG features will use mock mode.")
         return None
+
+
+def _check_and_fix_dimension_mismatch(client, expected_dim: int | None) -> None:
+    """Delete and recreate the collection if its embedding dimension doesn't
+    match the current provider. This handles switching between embedding
+    providers (e.g. default 384-dim → Voyage AI 1024-dim)."""
+    if expected_dim is None or client is None:
+        return
+
+    try:
+        col = client.get_collection(name="policy_documents")
+        # Peek at one record to check its dimension
+        peek = col.peek(limit=1)
+        if peek and peek.get("embeddings") and len(peek["embeddings"]) > 0:
+            existing_dim = len(peek["embeddings"][0])
+            if existing_dim != expected_dim:
+                print(
+                    f"⚠️  RAG: Dimension mismatch detected — collection has {existing_dim}-dim "
+                    f"vectors but current provider produces {expected_dim}-dim. "
+                    f"Deleting stale collection to recreate with correct dimensions."
+                )
+                client.delete_collection(name="policy_documents")
+    except Exception:
+        # Collection doesn't exist yet — nothing to fix
+        pass
 
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -133,6 +163,8 @@ def embed_policy(policy_id: int, file_path: str, title: str) -> int:
 
     Returns the number of chunks embedded.
     """
+    global _collection
+
     collection = _get_collection()
 
     text = extract_text_from_pdf(file_path)
@@ -160,8 +192,24 @@ def embed_policy(policy_id: int, file_path: str, title: str) -> int:
     except Exception:
         pass
 
-    # Add new chunks
-    collection.add(documents=chunks, ids=ids, metadatas=metadatas)
+    # Add new chunks — retry once on dimension mismatch by resetting collection
+    try:
+        collection.add(documents=chunks, ids=ids, metadatas=metadatas)
+    except Exception as e:
+        if "dimension" in str(e).lower():
+            print(f"⚠️  Dimension mismatch — resetting collection and retrying...")
+            _collection = None
+            try:
+                _chroma_client.delete_collection(name="policy_documents")
+            except Exception:
+                pass
+            collection = _get_collection()
+            if collection is not None:
+                collection.add(documents=chunks, ids=ids, metadatas=metadatas)
+            else:
+                raise
+        else:
+            raise
 
     return len(chunks)
 
