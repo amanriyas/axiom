@@ -244,14 +244,19 @@ export default function LandingPage() {
             {/* Badge */}
             <Badge className="mb-6 bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 px-4 py-1.5">
               <Sparkles className="w-3.5 h-3.5 mr-2" />
-              Introducing Axiom — Employee Onboarding, Reimagined
+              Employee Onboarding, Reimagined
             </Badge>
 
-            {/* Headline */}
-            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight mb-6 leading-[1.1]">
+            {/* App Name */}
+            <h1 className="text-5xl sm:text-6xl lg:text-8xl font-bold tracking-tight mb-4 gradient-text">
+              Axiom
+            </h1>
+
+            {/* Tagline */}
+            <p className="text-2xl sm:text-3xl lg:text-5xl font-bold tracking-tight mb-6 leading-[1.1] text-white">
               From Offer to Orientation.{" "}
               <span className="gradient-text">Automatically.</span>
-            </h1>
+            </p>
 
             {/* Subheadline */}
             <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-8">
