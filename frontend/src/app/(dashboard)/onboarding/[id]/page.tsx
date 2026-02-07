@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
+import type { OnboardingStep } from "@/types";
 import {
   ArrowLeft,
   Check,
