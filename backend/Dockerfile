@@ -25,7 +25,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application source code
 COPY app/ ./app/
 COPY scripts/ ./scripts/
-COPY tests/ ./tests/
 
 # Copy the startup script
 COPY start.sh .
